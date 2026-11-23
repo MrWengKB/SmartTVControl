@@ -55,29 +55,43 @@ jobs:
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
         run: |
-          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
-            # Tolerate line-wrapped base64 (e.g. from macOS `base64` without -b 0).
-            if ! printf '%s' "$SIGNING_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.jks"; then
-              echo "::error::SIGNING_KEYSTORE_BASE64 is not valid base64. Set it to the output of 'base64 -w0 release.jks' (Linux) or 'base64 -i release.jks' (macOS)."
-              exit 1
-            fi
-            if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" > /dev/null; then
-              echo "::error::The keystore did not open with SIGNING_STORE_PASSWORD, or has no key named SIGNING_KEY_ALIAS."
-              exit 1
-            fi
-            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-          else
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
             echo "::warning::No SIGNING_KEYSTORE_BASE64 secret; the APK is signed with a throwaway debug key, so later releases won't install over it as updates."
+            exit 0
           fi
+          # Pasted secrets often pick up a trailing newline or space; strip them.
+          trim() { printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+          store_pw=$(trim "$SIGNING_STORE_PASSWORD")
+          key_pw=$(trim "$SIGNING_KEY_PASSWORD")
+          alias=$(trim "$SIGNING_KEY_ALIAS")
+          # Tolerate line-wrapped base64 (e.g. from macOS `base64` without -b 0).
+          if ! printf '%s' "$SIGNING_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.jks"; then
+            echo "::error::SIGNING_KEYSTORE_BASE64 is not valid base64. Set it to the output of 'base64 -w0 release.jks' (Linux) or 'base64 -i release.jks' (macOS)."
+            exit 1
+          fi
+          # Fingerprints and lengths only, never the values, to help match secrets to the key file.
+          echo "Keystore sha256 starts with $(sha256sum "$RUNNER_TEMP/release.jks" | cut -c1-16)"
+          echo "Store password length ${#store_pw}, key password length ${#key_pw}, alias length ${#alias}"
+          if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$store_pw" > /dev/null; then
+            echo "::error::The keystore does not open with SIGNING_STORE_PASSWORD."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$store_pw" -alias "$alias" > /dev/null; then
+            echo "::error::The keystore has no key named '$alias' (SIGNING_KEY_ALIAS)."
+            exit 1
+          fi
+          {
+            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.jks"
+            echo "SIGNING_STORE_PASSWORD=$store_pw"
+            echo "SIGNING_KEY_PASSWORD=$key_pw"
+            echo "SIGNING_KEY_ALIAS=$alias"
+          } >> "$GITHUB_ENV"
 
       - name: Build release APK
         if: steps.version.outputs.new == 'true'
-        env:
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           ./gradlew :core:test :app:assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk "webOSControl-${{ steps.version.outputs.tag }}.apk"
