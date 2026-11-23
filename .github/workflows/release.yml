@@ -67,6 +67,8 @@ jobs:
           store_pw=$(trim "$SIGNING_STORE_PASSWORD")
           key_pw=$(trim "$SIGNING_KEY_PASSWORD")
           alias=$(trim "$SIGNING_KEY_ALIAS")
+          echo "::add-mask::$store_pw"
+          echo "::add-mask::$key_pw"
           # Tolerate line-wrapped base64 (e.g. from macOS `base64` without -b 0).
           if ! printf '%s' "$SIGNING_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.jks"; then
             echo "::error::SIGNING_KEYSTORE_BASE64 is not valid base64. Set it to the output of 'base64 -w0 release.jks' (Linux) or 'base64 -i release.jks' (macOS)."
