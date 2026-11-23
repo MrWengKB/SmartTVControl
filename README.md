@@ -20,6 +20,32 @@ Every push to `main` builds a debug APK in GitHub Actions. Open the latest run o
 **Android build** under the repository's Actions tab, download the `webOSControl-debug-apk`
 artifact, unzip it and install the APK on your phone (allow installs from unknown sources).
 
+### Releases
+
+Pushing a version tag builds a signed release APK and publishes it on the repository's
+Releases page:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+So that each release installs as an update over the previous one, sign them all with the same
+key. Create one once and add it as repository secrets (Settings > Secrets and variables > Actions):
+
+```sh
+keytool -genkeypair -v -keystore release.jks -alias webos -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 release.jks   # value for SIGNING_KEYSTORE_BASE64
+```
+
+| Secret | Value |
+| --- | --- |
+| `SIGNING_KEYSTORE_BASE64` | the base64 output above |
+| `SIGNING_STORE_PASSWORD` | the keystore password |
+| `SIGNING_KEY_ALIAS` | `webos` (or the alias you chose) |
+| `SIGNING_KEY_PASSWORD` | the key password |
+
+Keep `release.jks` safe; without the secrets the release is signed with a throwaway debug key.
+
 To build it yourself you need JDK 17 and the Android SDK:
 
 ```sh
