@@ -105,8 +105,10 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           tail -n +2 latest-notes.md > release-notes.md
+          # The tag goes on the default branch. Pinning it to an older commit ($GITHUB_SHA) fails
+          # with 403 when main has since changed a workflow file, because GITHUB_TOKEN can't
+          # create refs across workflow changes.
           gh release create "$TAG" "webOSControl-$TAG.apk" \
-            --target "$GITHUB_SHA" \
             --title "webOSControl $TAG" \
             --notes-file release-notes.md \
             --latest
