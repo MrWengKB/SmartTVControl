@@ -108,6 +108,14 @@ fun DevicesScreen(state: UiState, vm: RemoteViewModel) {
             }
             item { Spacer(Modifier.size(8.dp)) }
             item { ManualEntry(onAdd = vm::addManually) }
+            item {
+                Text(
+                    "Version ${com.mrwengkb.weboscontrol.BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 24.dp),
+                )
+            }
         }
     }
 }

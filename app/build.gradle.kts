@@ -1,7 +1,21 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+}
+
+// Single source of truth for the version: version.properties at the repo root.
+val appVersionName: String = Properties().run {
+    rootProject.file("version.properties").inputStream().use { load(it) }
+    getProperty("versionName")
+}
+val appVersionCode: Int = run {
+    val parts = appVersionName.substringBefore('-').split('.').map { it.toInt() }
+    require(parts.size == 3 && parts[1] < 1000 && parts[2] < 1000) { "versionName must be MAJOR.MINOR.PATCH" }
+    // 1.2.3 -> 1002003, so every bump increases the code Android uses for updates.
+    parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2]
 }
 
 android {
@@ -12,9 +26,8 @@ android {
         applicationId = "com.mrwengkb.weboscontrol"
         minSdk = 26
         targetSdk = 35
-        // CI passes these from the release tag (v1.2.3) and run number.
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
     }
 
     // Release signing comes from environment variables (set as GitHub secrets in CI). Without
@@ -48,6 +61,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"

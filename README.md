@@ -20,14 +20,18 @@ Every push to `main` builds a debug APK in GitHub Actions. Open the latest run o
 **Android build** under the repository's Actions tab, download the `webOSControl-debug-apk`
 artifact, unzip it and install the APK on your phone (allow installs from unknown sources).
 
-### Releases
+### Versions and releases
 
-Pushing a version tag builds a signed release APK and publishes it on the repository's
-Releases page:
+The version lives in [`version.properties`](version.properties) as `MAJOR.MINOR.PATCH`
+(semantic versioning): bump PATCH for fixes, MINOR for new features, MAJOR for big changes.
+Android's `versionCode` is derived from it (1.2.3 becomes 1002003), and the app shows the version
+at the bottom of the TV list.
 
-```sh
-git tag v0.1.0 && git push origin v0.1.0
-```
+To publish a release, open **Actions > Release > Run workflow** and pick `patch`, `minor` or
+`major`. The workflow bumps `version.properties`, commits it, tags `vX.Y.Z`, builds the release
+APK and attaches it to a new entry on the Releases page. Alternatively edit the file yourself,
+commit, and push a matching tag (`git tag v0.2.0 && git push origin v0.2.0`); a tag that doesn't
+match the file fails the build.
 
 So that each release installs as an update over the previous one, sign them all with the same
 key. Create one once and add it as repository secrets (Settings > Secrets and variables > Actions):
