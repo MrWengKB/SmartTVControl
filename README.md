@@ -22,16 +22,19 @@ artifact, unzip it and install the APK on your phone (allow installs from unknow
 
 ### Versions and releases
 
-The version lives in [`version.properties`](version.properties) as `MAJOR.MINOR.PATCH`
-(semantic versioning): bump PATCH for fixes, MINOR for new features, MAJOR for big changes.
-Android's `versionCode` is derived from it (1.2.3 becomes 1002003), and the app shows the version
-at the bottom of the TV list.
+[`versions.md`](versions.md) is the version history and the single source of the version
+number. To release, add a new section at the top and push to main:
 
-To publish a release, open **Actions > Release > Run workflow** and pick `patch`, `minor` or
-`major`. The workflow bumps `version.properties`, commits it, tags `vX.Y.Z`, builds the release
-APK and attaches it to a new entry on the Releases page. Alternatively edit the file yourself,
-commit, and push a matching tag (`git tag v0.2.0 && git push origin v0.2.0`); a tag that doesn't
-match the file fails the build.
+```md
+# v0.2.0
+- What changed
+```
+
+The **Release** workflow then builds the APK and publishes it on the Releases page as `v0.2.0`,
+with that section as the release notes. Pushes that don't add a new version publish nothing.
+Use semantic versioning: bump the last number for fixes, the middle one for new features.
+Android's `versionCode` is derived from the version (1.2.3 becomes 1002003), and the app shows
+the version at the bottom of the TV list.
 
 So that each release installs as an update over the previous one, sign them all with the same
 key. Create one once and add it as repository secrets (Settings > Secrets and variables > Actions):

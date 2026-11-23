@@ -1,21 +1,22 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
-// Single source of truth for the version: version.properties at the repo root.
-val appVersionName: String = Properties().run {
-    rootProject.file("version.properties").inputStream().use { load(it) }
-    getProperty("versionName")
+// The version comes from the first heading of versions.md, e.g. "# v1.2.3" -> "1.2.3".
+// Adding a new heading at the top and pushing to main publishes that version as a release.
+val appVersionName: String = run {
+    val heading = rootProject.file("versions.md").readLines().firstOrNull { it.trimStart().startsWith("#") }
+        ?: error("versions.md has no version heading")
+    Regex("""[vV](\d+\.\d+\.\d+)""").find(heading)?.groupValues?.get(1)
+        ?: error("First heading of versions.md must contain a version like v1.2.3: $heading")
 }
 val appVersionCode: Int = run {
-    val parts = appVersionName.substringBefore('-').split('.').map { it.toInt() }
-    require(parts.size == 3 && parts[1] < 1000 && parts[2] < 1000) { "versionName must be MAJOR.MINOR.PATCH" }
-    // 1.2.3 -> 1002003, so every bump increases the code Android uses for updates.
-    parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2]
+    val (major, minor, patch) = appVersionName.split('.').map { it.toInt() }
+    require(minor < 1000 && patch < 1000) { "minor and patch must be below 1000" }
+    // 1.2.3 -> 1002003, so every new version is an update Android accepts.
+    major * 1_000_000 + minor * 1_000 + patch
 }
 
 android {

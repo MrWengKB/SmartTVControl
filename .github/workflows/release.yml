@@ -1,19 +1,15 @@
 name: Release
 
-# Two ways to release:
-#  - Actions > Release > Run workflow, pick patch/minor/major: bumps version.properties,
-#    commits, tags vX.Y.Z, builds and publishes the GitHub Release.
-#  - Or edit version.properties yourself and push a matching tag (git tag v0.2.0 && git push origin v0.2.0).
+# Same idea as HanziQuery's version-history.md: add a new "# vX.Y.Z" section at the top of
+# versions.md and push to main. If that version has no release yet, this builds the APK and
+# publishes it as release vX.Y.Z with that section as the release notes. Pushes that don't add a
+# new version do nothing.
 on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        description: Which part of the version to bump
-        type: choice
-        options: [patch, minor, major]
-        default: patch
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths:
+      - versions.md
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -25,37 +21,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read the latest version from versions.md
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # First section (from the first heading to the next) = the newest version's notes.
+          awk '/^[[:space:]]*#/{n++} n==1' versions.md > latest-notes.md
+          VERSION=$(head -1 latest-notes.md | grep -oE '[vV][0-9]+\.[0-9]+\.[0-9]+' | head -1 | tr V v)
+          if [ -z "$VERSION" ]; then
+            echo "::error::The first heading of versions.md needs a version like '# v1.2.3'"
+            exit 1
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+          if gh release view "$VERSION" > /dev/null 2>&1; then
+            echo "Release $VERSION already exists; nothing to do."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-java@v4
+        if: steps.version.outputs.new == 'true'
         with:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-
-      - name: Work out the version
-        env:
-          BUMP: ${{ inputs.bump }}
-        run: |
-          current=$(sed -n 's/^versionName=//p' version.properties)
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            IFS=. read -r major minor patch <<< "${current%%-*}"
-            case "$BUMP" in
-              major) major=$((major + 1)); minor=0; patch=0 ;;
-              minor) minor=$((minor + 1)); patch=0 ;;
-              *) patch=$((patch + 1)) ;;
-            esac
-            version="$major.$minor.$patch"
-            sed -i "s/^versionName=.*/versionName=$version/" version.properties
-          else
-            version="${GITHUB_REF_NAME#v}"
-            if [ "$version" != "$current" ]; then
-              echo "::error::Tag $GITHUB_REF_NAME does not match version.properties ($current). Update the file first."
-              exit 1
-            fi
-          fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          echo "TAG=v$version" >> "$GITHUB_ENV"
+        if: steps.version.outputs.new == 'true'
 
       - name: Decode signing key
+        if: steps.version.outputs.new == 'true'
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
         run: |
@@ -67,24 +63,24 @@ jobs:
           fi
 
       - name: Build release APK
+        if: steps.version.outputs.new == 'true'
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           ./gradlew :core:test :app:assembleRelease --stacktrace
-          cp app/build/outputs/apk/release/app-release.apk "webOSControl-$TAG.apk"
-
-      - name: Commit and tag the version bump
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "Release $TAG"
-          git tag "$TAG"
-          git push origin "HEAD:$GITHUB_REF_NAME" "$TAG"
+          cp app/build/outputs/apk/release/app-release.apk "webOSControl-${{ steps.version.outputs.tag }}.apk"
 
       - name: Publish GitHub Release
+        if: steps.version.outputs.new == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$TAG" "webOSControl-$TAG.apk" --title "webOSControl $TAG" --generate-notes
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          tail -n +2 latest-notes.md > release-notes.md
+          gh release create "$TAG" "webOSControl-$TAG.apk" \
+            --target "$GITHUB_SHA" \
+            --title "webOSControl $TAG" \
+            --notes-file release-notes.md \
+            --latest
