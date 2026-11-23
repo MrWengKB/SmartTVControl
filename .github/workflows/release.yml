@@ -54,9 +54,19 @@ jobs:
         if: steps.version.outputs.new == 'true'
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
         run: |
           if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
-            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            # Tolerate line-wrapped base64 (e.g. from macOS `base64` without -b 0).
+            if ! printf '%s' "$SIGNING_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.jks"; then
+              echo "::error::SIGNING_KEYSTORE_BASE64 is not valid base64. Set it to the output of 'base64 -w0 release.jks' (Linux) or 'base64 -i release.jks' (macOS)."
+              exit 1
+            fi
+            if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" > /dev/null; then
+              echo "::error::The keystore did not open with SIGNING_STORE_PASSWORD, or has no key named SIGNING_KEY_ALIAS."
+              exit 1
+            fi
             echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
           else
             echo "::warning::No SIGNING_KEYSTORE_BASE64 secret; the APK is signed with a throwaway debug key, so later releases won't install over it as updates."
