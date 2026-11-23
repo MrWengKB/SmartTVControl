@@ -1,3 +1,8 @@
+# v0.1.1
+- debug
+- version numbering convention
+- auto build and release upon updating versions.md
+  
 # v0.1.0
 - First release: find LG webOS TVs on Wi-Fi or by IP, pair once and remember the TV
 - Power off, and power on with Wake-on-LAN
