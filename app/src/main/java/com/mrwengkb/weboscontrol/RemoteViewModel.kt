@@ -12,6 +12,7 @@ import com.mrwengkb.weboscontrol.core.keyboardUpdates
 import com.mrwengkb.weboscontrol.core.textEdit
 import com.mrwengkb.weboscontrol.core.PointerSocket
 import com.mrwengkb.weboscontrol.core.SsdpDiscovery
+import com.mrwengkb.weboscontrol.core.TvButton
 import com.mrwengkb.weboscontrol.core.TvDevice
 import com.mrwengkb.weboscontrol.core.VolumeStatus
 import com.mrwengkb.weboscontrol.core.WakeOnLan
