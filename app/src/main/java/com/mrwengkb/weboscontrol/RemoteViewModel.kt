@@ -12,7 +12,6 @@ import com.mrwengkb.weboscontrol.core.keyboardUpdates
 import com.mrwengkb.weboscontrol.core.textEdit
 import com.mrwengkb.weboscontrol.core.PointerSocket
 import com.mrwengkb.weboscontrol.core.SsdpDiscovery
-import com.mrwengkb.weboscontrol.core.TvButton
 import com.mrwengkb.weboscontrol.core.TvDevice
 import com.mrwengkb.weboscontrol.core.VolumeStatus
 import com.mrwengkb.weboscontrol.core.WakeOnLan
@@ -295,31 +294,6 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { ensurePointer()?.move(dx, dy) }
     }
 
-    private var holdJob: Job? = null
-
-    /**
-     * Holds the remote's OK/pointer button down, like keeping the LG remote's wheel pressed
-     * (long-press opens app list edit mode). The pointer socket has no "hold" message, so this
-     * repeats a pointer-down event until [holdEnd].
-     */
-    fun holdStart() {
-        holdJob?.cancel()
-        holdJob = viewModelScope.launch {
-            val p = ensurePointer() ?: return@launch
-            while (true) {
-                p.move(0, 0, down = true)
-                delay(100)
-            }
-        }
-    }
-
-    fun holdEnd() {
-        val job = holdJob ?: return
-        holdJob = null
-        job.cancel()
-        viewModelScope.launch { ensurePointer()?.move(0, 0, down = false) }
-    }
-
     fun click() {
         viewModelScope.launch { ensurePointer()?.click() }
     }
@@ -357,12 +331,6 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     fun backspace() {
         typing.trySend { it.deleteCharacters(1) }
     }
-
-    /**
-     * webOS doesn't let remote apps uninstall (the TV answers 404), so this opens the TV's home
-     * app list, where the user finishes with the TV remote.
-     */
-    fun showUninstallOnTv() = button(TvButton.HOME)
 
     fun loadApps() = command { c -> _ui.update { it.copy(apps = c.listApps()) } }
     fun loadInputs() = command { c -> _ui.update { it.copy(inputs = c.listInputs()) } }

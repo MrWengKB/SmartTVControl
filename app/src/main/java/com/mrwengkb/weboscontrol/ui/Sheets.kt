@@ -66,14 +66,13 @@ import com.mrwengkb.weboscontrol.core.TvButton
 fun AppsSheet(
     apps: List<AppInfo>?,
     onPick: (AppInfo) -> Unit,
-    onShowUninstallOnTv: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var confirm by remember { mutableStateOf<AppInfo?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetTitle("Apps")
         Text(
-            "Tap to open. Long-press an app for how to uninstall it.",
+            "Tap to open an app.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -116,18 +115,11 @@ fun AppsSheet(
             title = { Text("Uninstall ${app.title}") },
             text = {
                 Text(
-                    "LG TVs don't let phone apps uninstall directly, so it's done the same way as with the LG remote.\n\n" +
-                        "Show on TV opens the TV's app list. Then, on this remote's Touchpad:\n" +
-                        "1. Move the pointer onto ${app.title}\n" +
-                        "2. Press and hold the touchpad until the list enters edit mode\n" +
-                        "3. Move to the X on ${app.title}, tap, and confirm\n\n" +
-                        "With the arrows: highlight the app, press and hold OK, then select the X.",
+                    "LG TVs don't allow phone apps to uninstall apps. To remove ${app.title}, use the LG remote: " +
+                        "on the TV's app list, press and hold the app, then select the X.",
                 )
             },
-            confirmButton = {
-                TextButton(onClick = { onShowUninstallOnTv(); confirm = null; onDismiss() }) { Text("Show on TV") }
-            },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
+            confirmButton = { TextButton(onClick = { confirm = null }) { Text("OK") } },
         )
     }
 }

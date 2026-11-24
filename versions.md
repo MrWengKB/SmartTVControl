@@ -1,3 +1,7 @@
+# v0.1.7
+- Removed press-and-hold on OK and the touchpad (the TV didn't respond to it)
+- Long-pressing an app in the Apps list shows how to uninstall it with the LG remote
+
 # v0.1.6
 - Press and hold OK or the touchpad to hold the remote's button, like the LG remote (e.g. app list edit mode)
 - Uninstall: LG TVs refuse uninstall requests from phone apps, so long-pressing an app in the Apps list now opens the TV's app list with steps to remove it via hold and X
