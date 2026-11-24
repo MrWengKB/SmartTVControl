@@ -1,3 +1,8 @@
+# v0.2.0
+- Google TV / Android TV support: find them on Wi-Fi, pair by typing the code shown on the TV, then use arrows, OK, Back, Home, Settings, Info, colour keys, numbers, volume, mute, channels, media keys, power, typing, Input key and a list of common apps
+- The app tells webOS and Google TVs apart by itself; for a typed IP it checks which ports answer, and asks you to choose if the TV doesn't reply
+- LG webOS features are unchanged
+
 # v0.1.0
 - First SmartTVControl release, based on webOSControl v0.1.9 (LG webOS TVs)
 - Find TVs on Wi-Fi or by IP, pair once and remember the TV
