@@ -1,3 +1,6 @@
+# v0.1.9
+- Colour buttons back to plain buttons without labels or ? (the TV already shows their functions when you press Up)
+
 # v0.1.8
 - Colour buttons show their Live TV functions (red: Subtitles, yellow: Dual sound)
 - A ? beside each colour button explains that what they do changes from app to app
