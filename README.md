@@ -1,9 +1,8 @@
 # SmartTVControl
-An easy-to-use app that acts as a remote control for smart TVs. Support for different TV OSes will be added incrementally.
 
-It starts from [webOSControl](https://github.com/MrWengKB/webOSControl) v0.1.9, with its full history, so today it supports LG webOS TVs. See [docs/HANDOVER.md](docs/HANDOVER.md) for the plan to add more brands.
+A native Android remote control, currently for LG webOS TVs, written in Kotlin with Jetpack Compose. Support for different TV OSes will be added subsequently.
 
-A native Android remote control, currently for LG webOS TVs, written in Kotlin with Jetpack Compose.
+It starts from [webOSControl](https://github.com/MrWengKB/webOSControl) v0.1.9, with its full history.
 
 ## Features
 
