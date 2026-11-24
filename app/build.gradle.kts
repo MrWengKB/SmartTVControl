@@ -46,9 +46,17 @@ android {
     }
 
     buildTypes {
+        debug {
+            // CI debug builds are signed with a throwaway key. A separate app id lets them install
+            // next to the release app instead of clashing with it ("signatures don't match").
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            resValue("string", "app_name", "webOS Remote (debug)")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            resValue("string", "app_name", "webOS Remote")
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }

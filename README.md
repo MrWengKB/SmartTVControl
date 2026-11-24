@@ -16,7 +16,9 @@ A native Android remote control for LG webOS TVs, written in Kotlin with Jetpack
 
 ## Install
 
-Every push to `main` builds a debug APK in GitHub Actions. Open the latest run of
+Install the APK from the latest entry on the Releases page; new releases install over it as updates.
+
+Every push to `main` also builds a debug APK in GitHub Actions. It installs as a separate app, "webOS Remote (debug)", because it is signed with a throwaway key. Open the latest run of
 **Android build** under the repository's Actions tab, download the `webOSControl-debug-apk`
 artifact, unzip it and install the APK on your phone (allow installs from unknown sources).
 
