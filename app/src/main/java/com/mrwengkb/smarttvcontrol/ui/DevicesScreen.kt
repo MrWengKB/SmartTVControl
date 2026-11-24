@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tv
@@ -124,6 +125,17 @@ fun DevicesScreen(state: UiState, vm: RemoteViewModel) {
             item { Spacer(Modifier.size(8.dp)) }
             item { ManualEntry(probing = state.probing, onAdd = vm::addManually) }
             item {
+                Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionTitle("No Wi-Fi?")
+                    DeviceRow(
+                        title = "Use Bluetooth",
+                        subtitle = "The phone becomes a Bluetooth keyboard and remote for the TV (pair once).",
+                        icon = Icons.Default.Bluetooth,
+                        onClick = vm::useBluetoothRemote,
+                    )
+                }
+            }
+            item {
                 Row(Modifier.padding(top = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "Version ${com.mrwengkb.smarttvcontrol.BuildConfig.VERSION_NAME}",
@@ -174,10 +186,16 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun DeviceRow(title: String, subtitle: String, onClick: () -> Unit, onForget: (() -> Unit)? = null) {
+private fun DeviceRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    onForget: (() -> Unit)? = null,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Tv,
+) {
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Tv, contentDescription = null)
+            Icon(icon, contentDescription = null)
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
