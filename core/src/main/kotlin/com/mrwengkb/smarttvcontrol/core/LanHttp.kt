@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol.core
+package com.mrwengkb.smarttvcontrol.core
 
 import okhttp3.OkHttpClient
 import java.security.SecureRandom

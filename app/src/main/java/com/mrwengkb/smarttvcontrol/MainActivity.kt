@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol
+package com.mrwengkb.smarttvcontrol
 
 import android.os.Bundle
 import android.view.KeyEvent
@@ -9,11 +9,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mrwengkb.weboscontrol.core.WebOsClient
-import com.mrwengkb.weboscontrol.ui.DevicesScreen
-import com.mrwengkb.weboscontrol.ui.RemoteScreen
-import com.mrwengkb.weboscontrol.ui.RemoteTheme
-import com.mrwengkb.weboscontrol.ui.UpdateDialog
+import com.mrwengkb.smarttvcontrol.core.WebOsClient
+import com.mrwengkb.smarttvcontrol.ui.DevicesScreen
+import com.mrwengkb.smarttvcontrol.ui.RemoteScreen
+import com.mrwengkb.smarttvcontrol.ui.RemoteTheme
+import com.mrwengkb.smarttvcontrol.ui.UpdateDialog
 
 class MainActivity : ComponentActivity() {
     private val viewModel: RemoteViewModel by viewModels()

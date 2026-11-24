@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "webOSControl"
+rootProject.name = "SmartTVControl"
 include(":core")
 include(":app")

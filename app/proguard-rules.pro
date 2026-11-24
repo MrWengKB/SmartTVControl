@@ -3,4 +3,4 @@
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
 # The pairing manifest is loaded as a classpath resource next to this class.
--keep class com.mrwengkb.weboscontrol.core.Pairing { *; }
+-keep class com.mrwengkb.smarttvcontrol.core.Pairing { *; }

@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol.ui
+package com.mrwengkb.smarttvcontrol.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,8 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.mrwengkb.weboscontrol.RemoteViewModel
-import com.mrwengkb.weboscontrol.UiState
+import com.mrwengkb.smarttvcontrol.RemoteViewModel
+import com.mrwengkb.smarttvcontrol.UiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -123,7 +123,7 @@ fun DevicesScreen(state: UiState, vm: RemoteViewModel) {
             item {
                 Row(Modifier.padding(top = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Version ${com.mrwengkb.weboscontrol.BuildConfig.VERSION_NAME}",
+                        "Version ${com.mrwengkb.smarttvcontrol.BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),

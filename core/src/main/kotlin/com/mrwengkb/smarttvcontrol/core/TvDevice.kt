@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol.core
+package com.mrwengkb.smarttvcontrol.core
 
 /** A webOS TV found on the local network (or entered by hand). */
 data class TvDevice(

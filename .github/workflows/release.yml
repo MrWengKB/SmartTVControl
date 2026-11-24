@@ -96,7 +96,7 @@ jobs:
         if: steps.version.outputs.new == 'true'
         run: |
           ./gradlew :core:test :app:assembleRelease --stacktrace
-          cp app/build/outputs/apk/release/app-release.apk "webOSControl-${{ steps.version.outputs.tag }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "SmartTVControl-${{ steps.version.outputs.tag }}.apk"
 
       - name: Publish GitHub Release
         if: steps.version.outputs.new == 'true'
@@ -108,7 +108,7 @@ jobs:
           # The tag goes on the default branch. Pinning it to an older commit ($GITHUB_SHA) fails
           # with 403 when main has since changed a workflow file, because GITHUB_TOKEN can't
           # create refs across workflow changes.
-          gh release create "$TAG" "webOSControl-$TAG.apk" \
-            --title "webOSControl $TAG" \
+          gh release create "$TAG" "SmartTVControl-$TAG.apk" \
+            --title "SmartTVControl $TAG" \
             --notes-file release-notes.md \
             --latest

@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol
+package com.mrwengkb.smarttvcontrol
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +39,7 @@ class UpdateChecker(context: Context) {
         val request = Request.Builder()
             .url(LATEST_RELEASE_API)
             .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "webOSControl-Android")
+            .header("User-Agent", "SmartTVControl-Android")
             .build()
         val json = http.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IllegalStateException("GitHub returned ${response.code}")
@@ -70,8 +70,8 @@ class UpdateChecker(context: Context) {
 
     companion object {
         private const val KEY_IGNORED = "ignoredVersion"
-        const val LATEST_RELEASE_API = "https://api.github.com/repos/MrWengKB/webOSControl/releases/latest"
-        const val RELEASES_PAGE = "https://github.com/MrWengKB/webOSControl/releases"
+        const val LATEST_RELEASE_API = "https://api.github.com/repos/MrWengKB/SmartTVControl/releases/latest"
+        const val RELEASES_PAGE = "https://github.com/MrWengKB/SmartTVControl/releases"
 
         /** Compares MAJOR.MINOR.PATCH strings numerically; anything after '-' is ignored. */
         fun compareVersions(a: String, b: String): Int {

@@ -20,11 +20,11 @@ val appVersionCode: Int = run {
 }
 
 android {
-    namespace = "com.mrwengkb.weboscontrol"
+    namespace = "com.mrwengkb.smarttvcontrol"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mrwengkb.weboscontrol"
+        applicationId = "com.mrwengkb.smarttvcontrol"
         minSdk = 26
         targetSdk = 35
         versionCode = appVersionCode
@@ -51,12 +51,12 @@ android {
             // next to the release app instead of clashing with it ("signatures don't match").
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            resValue("string", "app_name", "webOS Remote (debug)")
+            resValue("string", "app_name", "Smart TV Remote (debug)")
         }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            resValue("string", "app_name", "webOS Remote")
+            resValue("string", "app_name", "Smart TV Remote")
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }

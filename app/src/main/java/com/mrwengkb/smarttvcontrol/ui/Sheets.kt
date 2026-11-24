@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol.ui
+package com.mrwengkb.smarttvcontrol.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -55,11 +55,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.mrwengkb.weboscontrol.RemoteViewModel
-import com.mrwengkb.weboscontrol.core.AppInfo
-import com.mrwengkb.weboscontrol.core.InputInfo
-import com.mrwengkb.weboscontrol.core.KeyboardState
-import com.mrwengkb.weboscontrol.core.TvButton
+import com.mrwengkb.smarttvcontrol.RemoteViewModel
+import com.mrwengkb.smarttvcontrol.core.AppInfo
+import com.mrwengkb.smarttvcontrol.core.InputInfo
+import com.mrwengkb.smarttvcontrol.core.KeyboardState
+import com.mrwengkb.smarttvcontrol.core.TvButton
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable

@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol.ui
+package com.mrwengkb.smarttvcontrol.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -16,8 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.mrwengkb.weboscontrol.BuildConfig
-import com.mrwengkb.weboscontrol.UpdateInfo
+import com.mrwengkb.smarttvcontrol.BuildConfig
+import com.mrwengkb.smarttvcontrol.UpdateInfo
 
 /** "Update available" prompt: Update downloads the new APK in the browser, Ignore skips this version. */
 @Composable

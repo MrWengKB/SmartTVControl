@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol.core
+package com.mrwengkb.smarttvcontrol.core
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async

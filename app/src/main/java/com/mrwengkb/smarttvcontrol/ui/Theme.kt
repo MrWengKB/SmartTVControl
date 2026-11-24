@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol.ui
+package com.mrwengkb.smarttvcontrol.ui
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

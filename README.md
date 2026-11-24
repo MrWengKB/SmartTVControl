@@ -1,14 +1,9 @@
 # SmartTVControl
 An easy-to-use app that acts as a remote control for smart TVs. Support for different TV OSes will be added incrementally.
 
+It starts from [webOSControl](https://github.com/MrWengKB/webOSControl) v0.1.9, with its full history, so today it supports LG webOS TVs. See [docs/HANDOVER.md](docs/HANDOVER.md) for the plan to add more brands.
 
-This repo starts as a copy of [webOSControl](https://github.com/MrWengKB/webOSControl) (LG webOS), with its full history. See [docs/HANDOVER.md](docs/HANDOVER.md) for the plan to add more brands.
-
----
-
-# webOSControl
-
-A native Android remote control for LG webOS TVs, written in Kotlin with Jetpack Compose.
+A native Android remote control, currently for LG webOS TVs, written in Kotlin with Jetpack Compose.
 
 ## Features
 
@@ -26,8 +21,8 @@ A native Android remote control for LG webOS TVs, written in Kotlin with Jetpack
 
 Install the APK from the latest entry on the Releases page; new releases install over it as updates.
 
-Every push to `main` also builds a debug APK in GitHub Actions. It installs as a separate app, "webOS Remote (debug)", because it is signed with a throwaway key. Open the latest run of
-**Android build** under the repository's Actions tab, download the `webOSControl-debug-apk`
+Every push to `main` also builds a debug APK in GitHub Actions. It installs as a separate app, "Smart TV Remote (debug)", because it is signed with a throwaway key. Open the latest run of
+**Android build** under the repository's Actions tab, download the `SmartTVControl-debug-apk`
 artifact, unzip it and install the APK on your phone (allow installs from unknown sources).
 
 ### Versions and releases
@@ -50,7 +45,7 @@ So that each release installs as an update over the previous one, sign them all 
 key. Create one once and add it as repository secrets (Settings > Secrets and variables > Actions):
 
 ```sh
-keytool -genkeypair -v -keystore release.jks -alias webos -keyalg RSA -keysize 2048 -validity 10000
+keytool -genkeypair -v -keystore release.jks -alias smarttv -keyalg RSA -keysize 2048 -validity 10000
 base64 -w0 release.jks   # value for SIGNING_KEYSTORE_BASE64
 ```
 
@@ -58,7 +53,7 @@ base64 -w0 release.jks   # value for SIGNING_KEYSTORE_BASE64
 | --- | --- |
 | `SIGNING_KEYSTORE_BASE64` | the base64 output above |
 | `SIGNING_STORE_PASSWORD` | the keystore password |
-| `SIGNING_KEY_ALIAS` | `webos` (or the alias you chose) |
+| `SIGNING_KEY_ALIAS` | `smarttv` (or the alias you chose) |
 | `SIGNING_KEY_PASSWORD` | the key password |
 
 Keep `release.jks` safe; without the secrets the release is signed with a throwaway debug key.

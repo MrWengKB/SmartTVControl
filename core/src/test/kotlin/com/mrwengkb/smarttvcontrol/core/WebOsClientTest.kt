@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol.core
+package com.mrwengkb.smarttvcontrol.core
 
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking

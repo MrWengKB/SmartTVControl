@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol
+package com.mrwengkb.smarttvcontrol
 
 import android.content.Context
 import org.json.JSONArray

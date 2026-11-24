@@ -1,4 +1,4 @@
-package com.mrwengkb.weboscontrol.ui
+package com.mrwengkb.smarttvcontrol.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -80,10 +80,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.mrwengkb.weboscontrol.RemoteViewModel
-import com.mrwengkb.weboscontrol.UiState
-import com.mrwengkb.weboscontrol.core.TvButton
-import com.mrwengkb.weboscontrol.core.WebOsClient
+import com.mrwengkb.smarttvcontrol.RemoteViewModel
+import com.mrwengkb.smarttvcontrol.UiState
+import com.mrwengkb.smarttvcontrol.core.TvButton
+import com.mrwengkb.smarttvcontrol.core.WebOsClient
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
