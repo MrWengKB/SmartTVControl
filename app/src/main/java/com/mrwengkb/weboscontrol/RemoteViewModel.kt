@@ -54,6 +54,8 @@ import java.net.InetAddress
 
 enum class Screen { Devices, Remote }
 
+data class UninstallStatus(val appTitle: String, val running: Boolean, val result: String? = null)
+
 data class UiState(
     val screen: Screen = Screen.Devices,
     val discovering: Boolean = false,
@@ -70,6 +72,8 @@ data class UiState(
     /** A newer release to offer, shown as a dialog. */
     val update: UpdateInfo? = null,
     val checkingUpdate: Boolean = false,
+    /** Progress or result of an uninstall, shown as a dialog above the Apps list. */
+    val uninstall: UninstallStatus? = null,
     val message: String? = null,
 )
 
@@ -333,15 +337,33 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         typing.trySend { it.deleteCharacters(1) }
     }
 
-    fun uninstallApp(app: AppInfo) = command { c ->
-        try {
-            c.uninstallApp(app.id)
-            showMessage("Uninstalled ${app.title}")
-        } catch (e: com.mrwengkb.weboscontrol.core.WebOsException) {
-            showMessage("The TV refused to uninstall ${app.title} (${e.message}). Use the TV remote instead: long-press the app and select X.")
+    fun uninstallApp(app: AppInfo) {
+        val c = client
+        if (c == null || !c.isConnected) {
+            _ui.update { it.copy(uninstall = UninstallStatus(app.title, running = false, result = "Not connected to the TV.")) }
+            return
         }
-        _ui.update { it.copy(apps = runCatching { c.listApps() }.getOrNull() ?: it.apps) }
+        _ui.update { it.copy(uninstall = UninstallStatus(app.title, running = true)) }
+        viewModelScope.launch {
+            val result = try {
+                val reply = c.uninstallApp(app.id)
+                val apps = runCatching { c.listApps() }.getOrNull()
+                if (apps != null) _ui.update { it.copy(apps = apps) }
+                if (apps != null && apps.any { it.id == app.id }) {
+                    "The TV accepted the request but ${app.title} is still installed.\n\nTV reply: $reply"
+                } else {
+                    "${app.title} was uninstalled."
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "The TV refused: ${e.message}\n\nYou can still uninstall it with the TV remote: long-press the app and select X."
+            }
+            _ui.update { it.copy(uninstall = UninstallStatus(app.title, running = false, result = result)) }
+        }
     }
+
+    fun dismissUninstall() = _ui.update { it.copy(uninstall = null) }
 
     fun loadApps() = command { c -> _ui.update { it.copy(apps = c.listApps()) } }
     fun loadInputs() = command { c -> _ui.update { it.copy(inputs = c.listInputs()) } }

@@ -67,6 +67,8 @@ fun AppsSheet(
     apps: List<AppInfo>?,
     onPick: (AppInfo) -> Unit,
     onUninstall: (AppInfo) -> Unit,
+    uninstall: com.mrwengkb.weboscontrol.UninstallStatus?,
+    onUninstallDone: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var confirm by remember { mutableStateOf<AppInfo?>(null) }
@@ -124,6 +126,22 @@ fun AppsSheet(
                 TextButton(onClick = { onUninstall(app); confirm = null }) { Text("Uninstall") }
             },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
+        )
+    }
+    uninstall?.let { status ->
+        AlertDialog(
+            onDismissRequest = { if (!status.running) onUninstallDone() },
+            title = { Text(if (status.running) "Uninstalling ${status.appTitle}…" else "Uninstall ${status.appTitle}") },
+            text = {
+                if (status.running) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                } else {
+                    Text(status.result.orEmpty())
+                }
+            },
+            confirmButton = {
+                if (!status.running) TextButton(onClick = onUninstallDone) { Text("OK") }
+            },
         )
     }
 }

@@ -220,6 +220,8 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
             state.apps,
             onPick = { vm.launchApp(it); sheet = null },
             onUninstall = vm::uninstallApp,
+            uninstall = state.uninstall,
+            onUninstallDone = vm::dismissUninstall,
             onDismiss = { sheet = null },
         )
         Sheet.Inputs -> InputsSheet(state.inputs, onPick = { vm.switchInput(it); sheet = null }, onDismiss = { sheet = null })

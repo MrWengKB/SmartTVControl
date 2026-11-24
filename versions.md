@@ -1,3 +1,6 @@
+# v0.1.5
+- Uninstall: show the TV's answer in a popup instead of a message hidden behind the Apps list
+
 # v0.1.4
 - Uninstall TV apps: long-press an app in the Apps list and confirm (experimental, some TVs may refuse)
 
