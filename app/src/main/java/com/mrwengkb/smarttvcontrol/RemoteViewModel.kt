@@ -6,14 +6,8 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.mrwengkb.smarttvcontrol.bluetooth.BluetoothRemote
-import com.mrwengkb.smarttvcontrol.bluetooth.BtState
 import com.mrwengkb.smarttvcontrol.core.foregroundAppUpdates
 import com.mrwengkb.smarttvcontrol.core.searchYouTube
-import com.mrwengkb.smarttvcontrol.core.Hid
-import com.mrwengkb.smarttvcontrol.core.HidAction
-import com.mrwengkb.smarttvcontrol.core.HidConsumer
-import com.mrwengkb.smarttvcontrol.core.HidKey
 import com.mrwengkb.smarttvcontrol.core.AndroidKey
 import com.mrwengkb.smarttvcontrol.core.AndroidTvApps
 import com.mrwengkb.smarttvcontrol.core.AndroidTvClient
@@ -103,21 +97,13 @@ data class UiState(
     val typeWithKeys: Boolean = false,
     /** webOS: the app on the TV's screen, e.g. youtube.leanback.v4. */
     val foregroundApp: String? = null,
-    /** The Bluetooth remote (phone acting as a Bluetooth keyboard), for when Wi-Fi isn't available. */
-    val bluetooth: BtState = BtState(),
-    /** The Bluetooth remote sheet is open. */
-    val bluetoothSheet: Boolean = false,
 ) {
     val isAndroidTv: Boolean get() = current?.platform == TvPlatform.ANDROID_TV
-
-    /** Keys go over Bluetooth: it is connected and the Wi-Fi connection isn't. */
-    val viaBluetooth: Boolean get() = bluetooth.connected && connection != WebOsClient.State.Connected
 }
 
 class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private val store = TvStore(app)
     private val updates = UpdateChecker(app)
-    private val bt = BluetoothRemote(app)
     private val _ui = MutableStateFlow(UiState(saved = store.all()))
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
@@ -138,9 +124,6 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private val typing = Channel<suspend (WebOsClient) -> Unit>(Channel.UNLIMITED)
 
     init {
-        viewModelScope.launch {
-            bt.state.collect { b -> _ui.update { it.copy(bluetooth = b) } }
-        }
         viewModelScope.launch {
             for (edit in typing) {
                 val c = client?.takeIf { it.isConnected } ?: continue
@@ -179,7 +162,6 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Called when the app comes to the foreground: reconnect to the current TV if needed. */
     fun onForeground() {
-        bt.resume()
         val tv = _ui.value.current ?: return
         val state = _ui.value.connection
         if (connectJob?.isActive != true && state !is WebOsClient.State.Connected && !_ui.value.pairingCode) connect(tv)
@@ -188,51 +170,11 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     /** Called when the app goes to the background: drop the connection to save battery. */
     fun onBackground() {
         disconnect()
-        bt.pause()
     }
 
     override fun onCleared() {
         disconnect()
-        bt.close()
     }
-
-    // ---- Bluetooth remote ------------------------------------------------------------------
-
-    fun openBluetooth() {
-        bt.refreshPaired()
-        _ui.update { it.copy(bluetoothSheet = true) }
-    }
-
-    fun closeBluetooth() = _ui.update { it.copy(bluetoothSheet = false) }
-
-    /** From the TV list, with no Wi-Fi: go to the remote and set up Bluetooth. */
-    fun useBluetoothRemote() {
-        _ui.update { it.copy(screen = Screen.Remote) }
-        openBluetooth()
-    }
-
-    /** Starts the Bluetooth remote; call again after the user grants permission or turns Bluetooth on. */
-    fun startBluetooth() = bt.start()
-    fun stopBluetooth() = bt.stop()
-    fun connectBluetooth(address: String) = bt.connect(address)
-    fun disconnectBluetooth() = bt.disconnect()
-    fun refreshBluetooth() = bt.refreshPaired()
-
-    private val viaBluetooth: Boolean get() = _ui.value.viaBluetooth
-
-    private fun hid(action: HidAction?) {
-        if (action == null) {
-            showMessage("That button isn't available over Bluetooth.")
-        } else if (!bt.send(action)) {
-            showMessage("Not connected to the TV")
-        }
-    }
-
-    private fun hidConsumer(usage: Int) = hid(HidAction.Consumer(usage))
-    private fun hidKey(usage: Int) = hid(HidAction.Key(Hid.KeyPress(usage)))
-
-    private fun needsWifi(what: String) =
-        showMessage("$what needs Wi-Fi. Over Bluetooth the app can only send keys.")
 
     // ---- Devices ---------------------------------------------------------------------------
 
@@ -545,7 +487,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private fun atvKey(code: Int) = atvCommand { it.key(code) }
 
     /** Android TVs have no input list for remotes; this presses the remote's Input key instead. */
-    fun inputKey() = if (viaBluetooth) needsWifi("Switching inputs") else atvKey(AndroidKey.TV_INPUT)
+    fun inputKey() = atvKey(AndroidKey.TV_INPUT)
 
     private val isAndroidTv: Boolean get() = _ui.value.isAndroidTv
 
@@ -576,10 +518,6 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun button(name: String) {
-        if (viaBluetooth) {
-            hid(HidAction.fromButton(name))
-            return
-        }
         if (isAndroidTv) {
             AndroidKey.fromButton(name)?.let(::atvKey)
             return
@@ -609,74 +547,23 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { ensurePointer()?.scroll(0, dy) }
     }
 
-    fun volumeUp() = when {
-        viaBluetooth -> hidConsumer(HidConsumer.VOLUME_UP)
-        isAndroidTv -> atvKey(AndroidKey.VOLUME_UP)
-        else -> command { it.volumeUp() }
-    }
-    fun volumeDown() = when {
-        viaBluetooth -> hidConsumer(HidConsumer.VOLUME_DOWN)
-        isAndroidTv -> atvKey(AndroidKey.VOLUME_DOWN)
-        else -> command { it.volumeDown() }
-    }
-    fun toggleMute() = when {
-        viaBluetooth -> hidConsumer(HidConsumer.MUTE)
-        isAndroidTv -> atvKey(AndroidKey.VOLUME_MUTE)
-        else -> command { it.setMute(!(_ui.value.volume?.muted ?: false)) }
-    }
-    fun channelUp() = when {
-        viaBluetooth -> hidConsumer(HidConsumer.CHANNEL_UP)
-        isAndroidTv -> atvKey(AndroidKey.CHANNEL_UP)
-        else -> command { it.channelUp() }
-    }
-    fun channelDown() = when {
-        viaBluetooth -> hidConsumer(HidConsumer.CHANNEL_DOWN)
-        isAndroidTv -> atvKey(AndroidKey.CHANNEL_DOWN)
-        else -> command { it.channelDown() }
-    }
-    fun play() = when {
-        // Many TVs only act on Play/Pause from Bluetooth keyboards, so send that for both.
-        viaBluetooth -> hidConsumer(HidConsumer.PLAY_PAUSE)
-        isAndroidTv -> atvKey(AndroidKey.MEDIA_PLAY)
-        else -> command { it.play() }
-    }
-    fun pause() = when {
-        viaBluetooth -> hidConsumer(HidConsumer.PLAY_PAUSE)
-        isAndroidTv -> atvKey(AndroidKey.MEDIA_PAUSE)
-        else -> command { it.pause() }
-    }
-    fun stop() = when {
-        viaBluetooth -> hidConsumer(HidConsumer.STOP)
-        isAndroidTv -> atvKey(AndroidKey.MEDIA_STOP)
-        else -> command { it.stop() }
-    }
-    fun rewind() = when {
-        viaBluetooth -> hidConsumer(HidConsumer.REWIND)
-        isAndroidTv -> atvKey(AndroidKey.MEDIA_REWIND)
-        else -> command { it.rewind() }
-    }
-    fun fastForward() = when {
-        viaBluetooth -> hidConsumer(HidConsumer.FAST_FORWARD)
-        isAndroidTv -> atvKey(AndroidKey.MEDIA_FAST_FORWARD)
-        else -> command { it.fastForward() }
-    }
-    fun launchApp(app: AppInfo) = when {
-        viaBluetooth -> needsWifi("Opening apps")
-        isAndroidTv -> atvCommand { it.launch(app.id) }
-        else -> command { it.launchApp(app.id) }
-    }
-    fun switchInput(input: InputInfo) = if (viaBluetooth) needsWifi("Switching inputs") else command { it.switchInput(input.id) }
+    fun volumeUp() = if (isAndroidTv) atvKey(AndroidKey.VOLUME_UP) else command { it.volumeUp() }
+    fun volumeDown() = if (isAndroidTv) atvKey(AndroidKey.VOLUME_DOWN) else command { it.volumeDown() }
+    fun toggleMute() =
+        if (isAndroidTv) atvKey(AndroidKey.VOLUME_MUTE) else command { it.setMute(!(_ui.value.volume?.muted ?: false)) }
+    fun channelUp() = if (isAndroidTv) atvKey(AndroidKey.CHANNEL_UP) else command { it.channelUp() }
+    fun channelDown() = if (isAndroidTv) atvKey(AndroidKey.CHANNEL_DOWN) else command { it.channelDown() }
+    fun play() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_PLAY) else command { it.play() }
+    fun pause() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_PAUSE) else command { it.pause() }
+    fun stop() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_STOP) else command { it.stop() }
+    fun rewind() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_REWIND) else command { it.rewind() }
+    fun fastForward() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_FAST_FORWARD) else command { it.fastForward() }
+    fun launchApp(app: AppInfo) = if (isAndroidTv) atvCommand { it.launch(app.id) } else command { it.launchApp(app.id) }
+    fun switchInput(input: InputInfo) = command { it.switchInput(input.id) }
     /** Mirrors an edit of the phone's text field onto the TV's focused text box. */
     fun typed(old: String, new: String) {
         val (delete, insert) = textEdit(old, new)
         if (delete == 0 && insert.isEmpty()) return
-        if (viaBluetooth) {
-            repeat(delete) { hidKey(HidKey.BACKSPACE) }
-            val keys = insert.map { HidKey.forChar(it) }
-            keys.filterNotNull().forEach { hid(HidAction.Key(it)) }
-            if (keys.any { it == null }) showMessage("Over Bluetooth only English letters, digits and common symbols can be typed.")
-            return
-        }
         if (isAndroidTv) {
             atvTyping.trySend { c ->
                 repeat(delete) { c.key(AndroidKey.DEL) }
@@ -697,31 +584,22 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun sendEnter() {
-        if (viaBluetooth) hidKey(HidKey.ENTER) else if (isAndroidTv) atvTyping.trySend { it.key(AndroidKey.ENTER) } else typing.trySend { it.sendEnter() }
+        if (isAndroidTv) atvTyping.trySend { it.key(AndroidKey.ENTER) } else typing.trySend { it.sendEnter() }
     }
 
     fun backspace() {
-        if (viaBluetooth) hidKey(HidKey.BACKSPACE) else if (isAndroidTv) atvTyping.trySend { it.key(AndroidKey.DEL) } else typing.trySend { it.deleteCharacters(1) }
+        if (isAndroidTv) atvTyping.trySend { it.key(AndroidKey.DEL) } else typing.trySend { it.deleteCharacters(1) }
     }
 
     fun loadApps() {
-        if (viaBluetooth) {
-            needsWifi("Opening apps")
-            return
-        }
         // Android TVs don't let remotes list installed apps, so offer a list of common ones.
         if (isAndroidTv) _ui.update { it.copy(apps = AndroidTvApps.popular) }
         else command { c -> _ui.update { it.copy(apps = c.listApps()) } }
     }
-    fun loadInputs() = if (viaBluetooth) needsWifi("Switching inputs") else command { c -> _ui.update { it.copy(inputs = c.listInputs()) } }
+    fun loadInputs() = command { c -> _ui.update { it.copy(inputs = c.listInputs()) } }
 
     /** Turns the TV off when connected, otherwise tries to wake it with Wake-on-LAN. */
     fun power() {
-        if (viaBluetooth) {
-            // Turns Google TVs off (and some on); webOS may ignore it.
-            hidConsumer(HidConsumer.POWER)
-            return
-        }
         if (isAndroidTv) {
             androidTvPower()
             return

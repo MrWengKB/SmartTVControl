@@ -17,7 +17,6 @@ It starts from [webOSControl](https://github.com/MrWengKB/webOSControl) v0.1.9, 
 | Inputs | Lists and switches inputs | Presses the Input key |
 | Typing | Yes | Yes |
 | Touchpad | Yes | No (Google TV has no pointer) |
-| Bluetooth remote (no Wi-Fi) | Depends on the model | Yes |
 
 The app works out which system a TV runs. TVs found on the Wi-Fi are detected by the way they
 advertise themselves. For a typed IP, the app checks which ports answer (3000/3001 for webOS,
@@ -34,22 +33,6 @@ advertise themselves. For a typed IP, the app checks which ports answer (3000/30
 - Media controls (play, pause, stop, rewind, fast forward).
 - Launch any installed app and switch HDMI inputs.
 - Type text into the TV's focused text box from the phone keyboard.
-- Bluetooth remote for when Wi-Fi isn't available (Android 9 or later, see below).
-
-## Bluetooth remote (no Wi-Fi)
-
-The phone can act as a Bluetooth keyboard and remote for the TV. Pair once: open the Bluetooth
-sheet (the Bluetooth icon on the remote, or "Use Bluetooth" on the TV list), tap **Make phone
-visible**, and on the TV search for Bluetooth accessories (Google TV: Settings > Remotes &
-Accessories > Pair remote or accessory; LG: the Bluetooth or devices menu in Settings). After
-that the app reconnects by itself while it's open, and lets go of the TV when it goes to the
-background.
-
-Whenever the Wi-Fi connection is down and Bluetooth is connected, the remote sends keys over
-Bluetooth: arrows, OK, Back, Home, Settings, volume, mute, channels, media keys, numbers,
-colour keys, power (off on Google TV) and typing (US keyboard characters). Opening apps,
-switching inputs, the touchpad and turning the TV on still need Wi-Fi. Google TV accepts
-Bluetooth keyboards; on LG TVs support for Bluetooth keyboards varies by model and webOS version.
 
 ## Install
 

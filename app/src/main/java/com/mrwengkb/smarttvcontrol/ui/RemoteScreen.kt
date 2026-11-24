@@ -27,8 +27,6 @@ import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
@@ -135,12 +133,6 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = vm::openBluetooth) {
-                        Icon(
-                            if (state.bluetooth.connected) Icons.Default.BluetoothConnected else Icons.Default.Bluetooth,
-                            contentDescription = "Bluetooth remote",
-                        )
-                    }
                     IconButton(onClick = vm::showDevices) { Icon(Icons.Default.Tv, contentDescription = "Choose TV") }
                 },
             )
@@ -171,26 +163,25 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
                 }
                 Spacer(Modifier.weight(1f))
                 RemoteKey(Icons.AutoMirrored.Filled.Input, "Inputs") {
-                    if (state.isAndroidTv || state.viaBluetooth) vm.inputKey() else { vm.loadInputs(); sheet = Sheet.Inputs }
+                    if (state.isAndroidTv) vm.inputKey() else { vm.loadInputs(); sheet = Sheet.Inputs }
                 }
                 Spacer(Modifier.width(10.dp))
-                RemoteKey(Icons.Default.Apps, "Apps") { vm.loadApps(); if (!state.viaBluetooth) sheet = Sheet.Apps }
+                RemoteKey(Icons.Default.Apps, "Apps") { vm.loadApps(); sheet = Sheet.Apps }
                 Spacer(Modifier.width(10.dp))
                 RemoteKey(Icons.Default.Keyboard, "Keyboard") { sheet = Sheet.Keyboard }
                 Spacer(Modifier.width(10.dp))
                 RemoteKey(Icons.Default.Dialpad, "Number pad") { sheet = Sheet.Numbers }
             }
 
-            // Google TV has no pointer, so it only gets the arrow keys (and so does Bluetooth).
-            val pointer = !state.isAndroidTv && !state.viaBluetooth
-            if (pointer) {
+            // Google TV has no pointer, so it only gets the arrow keys.
+            if (!state.isAndroidTv) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = !touchpad, onClick = { touchpad = false }, label = { Text("Arrows") })
                     FilterChip(selected = touchpad, onClick = { touchpad = true }, label = { Text("Touchpad") })
                 }
             }
 
-            if (touchpad && pointer) Touchpad(vm) else DPad(vm)
+            if (touchpad && !state.isAndroidTv) Touchpad(vm) else DPad(vm)
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 RemoteKey(Icons.AutoMirrored.Filled.ArrowBack, "Back") { vm.button(TvButton.BACK) }
@@ -255,13 +246,10 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
         Sheet.Numbers -> NumberSheet(vm, onDismiss = { sheet = null })
         null -> Unit
     }
-    if (state.bluetoothSheet) BluetoothSheet(state.bluetooth, vm, onDismiss = vm::closeBluetooth)
 }
 
 private fun statusText(state: UiState): String = when {
     state.waking -> "Waking the TV…"
-    state.viaBluetooth -> "Bluetooth · ${state.bluetooth.deviceName ?: "connected"}"
-    state.current == null -> "Not connected"
     else -> when (val c = state.connection) {
         WebOsClient.State.Connected -> "Connected · ${state.current?.host}"
         WebOsClient.State.Connecting -> "Connecting…"
@@ -278,10 +266,6 @@ private fun ConnectionBanner(state: UiState, vm: RemoteViewModel) {
     if (connection == WebOsClient.State.Connected || state.waking) return
     if (state.pairingCode) {
         PairingCodeCard(vm)
-        return
-    }
-    if ((state.viaBluetooth && connection != WebOsClient.State.AwaitingPairing) || state.current == null) {
-        BluetoothBanner(state, vm)
         return
     }
     val (text, showRetry) = when (connection) {
@@ -304,35 +288,7 @@ private fun ConnectionBanner(state: UiState, vm: RemoteViewModel) {
             Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             if (showRetry) {
                 Spacer(Modifier.width(8.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Button(onClick = vm::reconnect) { Text("Connect") }
-                    // No Wi-Fi? The phone can be a Bluetooth remote instead.
-                    TextButton(onClick = vm::openBluetooth) { Text("Bluetooth") }
-                }
-            }
-        }
-    }
-}
-
-/** Shown while keys go over Bluetooth, or when there's no Wi-Fi TV to connect to. */
-@Composable
-private fun BluetoothBanner(state: UiState, vm: RemoteViewModel) {
-    val text = if (state.viaBluetooth) {
-        "Using Bluetooth (no Wi-Fi connection). Apps, inputs and power-on need Wi-Fi."
-    } else {
-        "No TV connected over Wi-Fi. You can use the phone as a Bluetooth remote instead."
-    }
-    Card(
-        Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(8.dp))
-            if (state.viaBluetooth) {
-                if (state.current != null) TextButton(onClick = vm::reconnect) { Text("Wi-Fi") }
-            } else {
-                Button(onClick = vm::openBluetooth) { Text("Bluetooth") }
+                Button(onClick = vm::reconnect) { Text("Connect") }
             }
         }
     }

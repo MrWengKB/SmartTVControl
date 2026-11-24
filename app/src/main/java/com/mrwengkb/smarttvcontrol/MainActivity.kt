@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
     /** The phone's volume keys control the TV while the remote is connected. */
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         val state = viewModel.ui.value
-        if (state.screen == Screen.Remote && (state.connection == WebOsClient.State.Connected || state.viaBluetooth)) {
+        if (state.screen == Screen.Remote && state.connection == WebOsClient.State.Connected) {
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> { viewModel.volumeUp(); return true }
                 KeyEvent.KEYCODE_VOLUME_DOWN -> { viewModel.volumeDown(); return true }
