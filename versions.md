@@ -1,3 +1,7 @@
+# v0.2.2
+- Google TV / Android TV typing: use the text box details the TV sends the same way as the reference implementation, so typed text should now reach the TV
+- Keyboard sheet on Google TV: a "Type with key presses" switch as a fallback, and a short log of what the TV reports about its text boxes
+
 # v0.2.1
 - Fix typing on Google TV / Android TV: letters now appear in the TV's text box as you type
 
