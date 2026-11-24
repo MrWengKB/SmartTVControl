@@ -319,9 +319,9 @@ fun RemoteKey(
  * buttons differently, which the ? next to each button explains.
  */
 private object LiveTvColorLabels {
-    val RED: String? = null
+    val RED: String? = "Subtitles"
     val GREEN: String? = null
-    val YELLOW: String? = null
+    val YELLOW: String? = "Dual sound"
     val BLUE: String? = null
 }
 

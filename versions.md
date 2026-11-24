@@ -1,3 +1,7 @@
+# v0.1.8
+- Colour buttons show their Live TV functions (red: Subtitles, yellow: Dual sound)
+- A ? beside each colour button explains that what they do changes from app to app
+
 # v0.1.7
 - Removed press-and-hold on OK and the touchpad (the TV didn't respond to it)
 - Long-pressing an app in the Apps list shows how to uninstall it with the LG remote
