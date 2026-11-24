@@ -219,9 +219,7 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
         Sheet.Apps -> AppsSheet(
             state.apps,
             onPick = { vm.launchApp(it); sheet = null },
-            onUninstall = vm::uninstallApp,
-            uninstall = state.uninstall,
-            onUninstallDone = vm::dismissUninstall,
+            onShowUninstallOnTv = vm::showUninstallOnTv,
             onDismiss = { sheet = null },
         )
         Sheet.Inputs -> InputsSheet(state.inputs, onPick = { vm.switchInput(it); sheet = null }, onDismiss = { sheet = null })
@@ -352,18 +350,35 @@ private fun DPad(vm: RemoteViewModel) {
         Arrow(Icons.Default.KeyboardArrowDown, "Down", TvButton.DOWN, Alignment.BottomCenter)
         Arrow(Icons.Default.KeyboardArrowLeft, "Left", TvButton.LEFT, Alignment.CenterStart)
         Arrow(Icons.Default.KeyboardArrowRight, "Right", TvButton.RIGHT, Alignment.CenterEnd)
-        FilledIconButton(
-            onClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); vm.button(TvButton.ENTER) },
-            modifier = Modifier.size(96.dp),
+        // Tap = OK. Press and hold = hold the remote's button (e.g. app list edit mode).
+        Box(
+            Modifier
+                .size(96.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = { tryAwaitRelease(); vm.holdEnd() },
+                        onLongPress = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); vm.holdStart() },
+                        onTap = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); vm.button(TvButton.ENTER) },
+                    )
+                },
+            contentAlignment = Alignment.Center,
         ) {
-            Text("OK", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                "OK",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
         }
     }
 }
 
-/** Drag to move the TV's pointer, tap to click, drag the strip on the right to scroll. */
+/** Drag to move the TV's pointer, tap to click, hold to hold the button, drag the right strip to scroll. */
 @Composable
 private fun Touchpad(vm: RemoteViewModel) {
+    val haptics = LocalHapticFeedback.current
     Row(Modifier.fillMaxWidth().height(280.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         var remX by remember { mutableStateOf(0f) }
         var remY by remember { mutableStateOf(0f) }
@@ -373,7 +388,13 @@ private fun Touchpad(vm: RemoteViewModel) {
                 .fillMaxSize()
                 .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .pointerInput(Unit) { detectTapGestures(onTap = { vm.click() }) }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = { tryAwaitRelease(); vm.holdEnd() },
+                        onLongPress = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); vm.holdStart() },
+                        onTap = { vm.click() },
+                    )
+                }
                 .pointerInput(Unit) {
                     detectDragGestures { change, drag ->
                         change.consume()
@@ -391,7 +412,7 @@ private fun Touchpad(vm: RemoteViewModel) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                "Drag to move · tap to click",
+                "Drag to move · tap to click\nPress and hold to hold the button",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

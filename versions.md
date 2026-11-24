@@ -1,3 +1,7 @@
+# v0.1.6
+- Press and hold OK or the touchpad to hold the remote's button, like the LG remote (e.g. app list edit mode)
+- Uninstall: LG TVs refuse uninstall requests from phone apps, so long-pressing an app in the Apps list now opens the TV's app list with steps to remove it via hold and X
+
 # v0.1.5
 - Uninstall: show the TV's answer in a popup instead of a message hidden behind the Apps list
 

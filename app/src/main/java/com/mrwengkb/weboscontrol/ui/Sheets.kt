@@ -66,16 +66,14 @@ import com.mrwengkb.weboscontrol.core.TvButton
 fun AppsSheet(
     apps: List<AppInfo>?,
     onPick: (AppInfo) -> Unit,
-    onUninstall: (AppInfo) -> Unit,
-    uninstall: com.mrwengkb.weboscontrol.UninstallStatus?,
-    onUninstallDone: () -> Unit,
+    onShowUninstallOnTv: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var confirm by remember { mutableStateOf<AppInfo?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetTitle("Apps")
         Text(
-            "Tap to open. Long-press an app to uninstall it.",
+            "Tap to open. Long-press an app for how to uninstall it.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -115,33 +113,21 @@ fun AppsSheet(
     confirm?.let { app ->
         AlertDialog(
             onDismissRequest = { confirm = null },
-            title = { Text("Uninstall ${app.title}?") },
+            title = { Text("Uninstall ${app.title}") },
             text = {
                 Text(
-                    if (app.removable) "This removes the app from the TV. You can reinstall it later from the LG Content Store."
-                    else "The TV marks this app as built-in, so it will probably refuse to remove it."
+                    "LG TVs don't let phone apps uninstall directly, so it's done the same way as with the LG remote.\n\n" +
+                        "Show on TV opens the TV's app list. Then, on this remote's Touchpad:\n" +
+                        "1. Move the pointer onto ${app.title}\n" +
+                        "2. Press and hold the touchpad until the list enters edit mode\n" +
+                        "3. Move to the X on ${app.title}, tap, and confirm\n\n" +
+                        "With the arrows: highlight the app, press and hold OK, then select the X.",
                 )
             },
             confirmButton = {
-                TextButton(onClick = { onUninstall(app); confirm = null }) { Text("Uninstall") }
+                TextButton(onClick = { onShowUninstallOnTv(); confirm = null; onDismiss() }) { Text("Show on TV") }
             },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
-        )
-    }
-    uninstall?.let { status ->
-        AlertDialog(
-            onDismissRequest = { if (!status.running) onUninstallDone() },
-            title = { Text(if (status.running) "Uninstalling ${status.appTitle}…" else "Uninstall ${status.appTitle}") },
-            text = {
-                if (status.running) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                } else {
-                    Text(status.result.orEmpty())
-                }
-            },
-            confirmButton = {
-                if (!status.running) TextButton(onClick = onUninstallDone) { Text("OK") }
-            },
         )
     }
 }

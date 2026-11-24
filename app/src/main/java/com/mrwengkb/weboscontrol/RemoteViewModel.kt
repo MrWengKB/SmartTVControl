@@ -33,7 +33,6 @@ import com.mrwengkb.weboscontrol.core.setMute
 import com.mrwengkb.weboscontrol.core.stop
 import com.mrwengkb.weboscontrol.core.switchInput
 import com.mrwengkb.weboscontrol.core.tvInfo
-import com.mrwengkb.weboscontrol.core.uninstallApp
 import com.mrwengkb.weboscontrol.core.volumeDown
 import com.mrwengkb.weboscontrol.core.volumeUp
 import com.mrwengkb.weboscontrol.core.volumeUpdates
@@ -54,8 +53,6 @@ import java.net.InetAddress
 
 enum class Screen { Devices, Remote }
 
-data class UninstallStatus(val appTitle: String, val running: Boolean, val result: String? = null)
-
 data class UiState(
     val screen: Screen = Screen.Devices,
     val discovering: Boolean = false,
@@ -72,8 +69,6 @@ data class UiState(
     /** A newer release to offer, shown as a dialog. */
     val update: UpdateInfo? = null,
     val checkingUpdate: Boolean = false,
-    /** Progress or result of an uninstall, shown as a dialog above the Apps list. */
-    val uninstall: UninstallStatus? = null,
     val message: String? = null,
 )
 
@@ -299,6 +294,31 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { ensurePointer()?.move(dx, dy) }
     }
 
+    private var holdJob: Job? = null
+
+    /**
+     * Holds the remote's OK/pointer button down, like keeping the LG remote's wheel pressed
+     * (long-press opens app list edit mode). The pointer socket has no "hold" message, so this
+     * repeats a pointer-down event until [holdEnd].
+     */
+    fun holdStart() {
+        holdJob?.cancel()
+        holdJob = viewModelScope.launch {
+            val p = ensurePointer() ?: return@launch
+            while (true) {
+                p.move(0, 0, down = true)
+                delay(100)
+            }
+        }
+    }
+
+    fun holdEnd() {
+        val job = holdJob ?: return
+        holdJob = null
+        job.cancel()
+        viewModelScope.launch { ensurePointer()?.move(0, 0, down = false) }
+    }
+
     fun click() {
         viewModelScope.launch { ensurePointer()?.click() }
     }
@@ -337,33 +357,11 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         typing.trySend { it.deleteCharacters(1) }
     }
 
-    fun uninstallApp(app: AppInfo) {
-        val c = client
-        if (c == null || !c.isConnected) {
-            _ui.update { it.copy(uninstall = UninstallStatus(app.title, running = false, result = "Not connected to the TV.")) }
-            return
-        }
-        _ui.update { it.copy(uninstall = UninstallStatus(app.title, running = true)) }
-        viewModelScope.launch {
-            val result = try {
-                val reply = c.uninstallApp(app.id)
-                val apps = runCatching { c.listApps() }.getOrNull()
-                if (apps != null) _ui.update { it.copy(apps = apps) }
-                if (apps != null && apps.any { it.id == app.id }) {
-                    "The TV accepted the request but ${app.title} is still installed.\n\nTV reply: $reply"
-                } else {
-                    "${app.title} was uninstalled."
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                "The TV refused: ${e.message}\n\nYou can still uninstall it with the TV remote: long-press the app and select X."
-            }
-            _ui.update { it.copy(uninstall = UninstallStatus(app.title, running = false, result = result)) }
-        }
-    }
-
-    fun dismissUninstall() = _ui.update { it.copy(uninstall = null) }
+    /**
+     * webOS doesn't let remote apps uninstall (the TV answers 404), so this opens the TV's home
+     * app list, where the user finishes with the TV remote.
+     */
+    fun showUninstallOnTv() = button(TvButton.HOME)
 
     fun loadApps() = command { c -> _ui.update { it.copy(apps = c.listApps()) } }
     fun loadInputs() = command { c -> _ui.update { it.copy(inputs = c.listInputs()) } }

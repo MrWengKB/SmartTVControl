@@ -31,7 +31,6 @@ object Ssap {
     const val CHANNEL_DOWN = "ssap://tv/channelDown"
     const val LIST_LAUNCH_POINTS = "ssap://com.webos.applicationManager/listLaunchPoints"
     const val LAUNCH = "ssap://system.launcher/launch"
-    const val REMOVE_APP = "ssap://com.webos.appInstallService/remove"
     const val LIST_INPUTS = "ssap://tv/getExternalInputList"
     const val SWITCH_INPUT = "ssap://tv/switchInput"
     const val PLAY = "ssap://media.controls/play"
@@ -148,13 +147,6 @@ suspend fun WebOsClient.channelDown() = request(Ssap.CHANNEL_DOWN)
 
 suspend fun WebOsClient.listApps(): List<AppInfo> = parseApps(request(Ssap.LIST_LAUNCH_POINTS))
 suspend fun WebOsClient.launchApp(appId: String) = request(Ssap.LAUNCH, buildJsonObject { put("id", appId) })
-
-/**
- * Asks the TV to uninstall an app. LG doesn't document this for remote apps, so some TVs or
- * firmware versions may refuse it; the TV's error is passed on as a [WebOsException].
- */
-suspend fun WebOsClient.uninstallApp(appId: String) =
-    request(Ssap.REMOVE_APP, buildJsonObject { put("id", appId) }, timeoutMs = 20_000)
 
 suspend fun WebOsClient.listInputs(): List<InputInfo> = parseInputs(request(Ssap.LIST_INPUTS))
 suspend fun WebOsClient.switchInput(inputId: String) =
