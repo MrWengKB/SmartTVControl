@@ -198,9 +198,9 @@ class AndroidTvClientTest {
         assertEquals(AndroidTvClient.State.Connected, c.state.value)
 
         val configure = tv.nextReceived(1).message(1)!!
-        assertEquals(AndroidTvClient.FEATURES, configure.int(1))
+        assertEquals(AndroidTvClient.FEATURES and 622, configure.int(1))
         assertEquals("atvremote", configure.message(2)!!.string(5))
-        assertEquals(AndroidTvClient.FEATURES, tv.nextReceived(2).message(2)!!.int(1))
+        assertEquals(AndroidTvClient.FEATURES and 622, tv.nextReceived(2).message(2)!!.int(1))
         assertEquals(42, tv.nextReceived(9).message(9)!!.int(1))
 
         withTimeout(5_000) { c.volume.first { it != null } }
@@ -220,13 +220,14 @@ class AndroidTvClientTest {
         tv.push { message(22) { message(2) { int(1, 7); string(2, "") } } }
         withTimeout(5_000) { c.keyboardShown.first() }
         assertTrue(c.hasTextField)
-        c.setText("hi")
+        c.insertText("hi")
         val edit = tv.nextReceived(21).message(21)!!
         assertEquals(5, edit.int(1))
         assertEquals(7, edit.int(2))
         val info = edit.messages(3).single().message(2)!!
         assertEquals("hi", info.string(3))
-        assertEquals(1, info.int(1))
+        assertEquals(2, info.int(1))
+        assertEquals(2, info.int(2))
 
         c.close()
         assertEquals(AndroidTvClient.State.Disconnected, c.state.value)

@@ -149,12 +149,13 @@ class AndroidTvClient(
     private var scope: CoroutineScope? = null
     private val writeLock = Any()
 
+    @Volatile private var activeFeatures: Int = FEATURES
     @Volatile private var imeCounter: Int? = null
     @Volatile private var fieldCounter: Int? = null
 
     val isConnected: Boolean get() = socket != null && _state.value == State.Connected
 
-    /** True once the TV has told us about a text field, so [setText] can be used. */
+    /** True once the TV has told us about a text field, so [insertText] can be used. */
     val hasTextField: Boolean get() = imeCounter != null && fieldCounter != null
 
     /**
@@ -225,8 +226,10 @@ class AndroidTvClient(
                 when {
                     msg.has(CONFIGURE) -> {
                         configured = true
+                        // Only ask for features the TV says it supports.
+                        msg.message(CONFIGURE)?.int(1)?.takeIf { it != 0 }?.let { activeFeatures = FEATURES and it }
                         send(ProtoWriter().message(CONFIGURE) {
-                            int(1, FEATURES)
+                            int(1, activeFeatures)
                             message(2) {
                                 string(1, deviceModel)
                                 string(2, deviceVendor)
@@ -238,7 +241,7 @@ class AndroidTvClient(
                         })
                     }
                     msg.has(SET_ACTIVE) -> {
-                        send(ProtoWriter().message(SET_ACTIVE) { int(1, FEATURES) })
+                        send(ProtoWriter().message(SET_ACTIVE) { int(1, activeFeatures) })
                         ready.complete(Unit)
                     }
                     msg.has(PING_REQUEST) -> {
@@ -305,8 +308,13 @@ class AndroidTvClient(
     /** Opens an app link, such as `market://launch?id=com.netflix.ninja` or an https deep link. */
     suspend fun launch(link: String) = sendAsync(ProtoWriter().message(APP_LINK_LAUNCH) { string(1, link) })
 
-    /** Replaces the text in the TV's focused text box with [text], cursor at the end. */
-    suspend fun setText(text: String) {
+    /**
+     * Types [text] into the TV's focused text box at its cursor. The TV inserts what it is sent
+     * (it does not replace the box's contents), and start/end are the length of the inserted
+     * text, as in androidtvremote2. Deleting is done with [AndroidKey.DEL] key presses.
+     */
+    suspend fun insertText(text: String) {
+        if (text.isEmpty()) return
         val ime = imeCounter ?: 0
         val field = fieldCounter ?: 0
         sendAsync(ProtoWriter().message(IME_BATCH_EDIT) {
@@ -315,8 +323,8 @@ class AndroidTvClient(
             message(3) {
                 int(1, 1)
                 message(2) {
-                    int(1, text.length - 1)
-                    int(2, text.length - 1)
+                    int(1, text.length)
+                    int(2, text.length)
                     string(3, text)
                 }
             }

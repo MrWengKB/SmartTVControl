@@ -544,12 +544,12 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         if (delete == 0 && insert.isEmpty()) return
         if (isAndroidTv) {
             atvTyping.trySend { c ->
+                repeat(delete) { c.key(AndroidKey.DEL) }
                 if (c.hasTextField) {
-                    // The TV told us about its text box: set its whole text in one go.
-                    c.setText(new)
+                    // The TV told us about its text box: insert the new text at its cursor.
+                    c.insertText(insert)
                 } else {
                     // Otherwise type with key presses, which covers letters, digits and a few symbols.
-                    repeat(delete) { c.key(AndroidKey.DEL) }
                     insert.forEach { ch -> AndroidKey.forChar(ch)?.let { c.key(it) } }
                 }
             }
