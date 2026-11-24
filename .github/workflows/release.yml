@@ -1,0 +1,114 @@
+name: Release
+
+# Same idea as HanziQuery's version-history.md: add a new "# vX.Y.Z" section at the top of
+# versions.md and push to main. If that version has no release yet, this builds the APK and
+# publishes it as release vX.Y.Z with that section as the release notes. Pushes that don't add a
+# new version do nothing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - versions.md
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the latest version from versions.md
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # First section (from the first heading to the next) = the newest version's notes.
+          awk '/^[[:space:]]*#/{n++} n==1' versions.md > latest-notes.md
+          VERSION=$(head -1 latest-notes.md | grep -oE '[vV][0-9]+\.[0-9]+\.[0-9]+' | head -1 | tr V v)
+          if [ -z "$VERSION" ]; then
+            echo "::error::The first heading of versions.md needs a version like '# v1.2.3'"
+            exit 1
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+          if gh release view "$VERSION" > /dev/null 2>&1; then
+            echo "Release $VERSION already exists; nothing to do."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.version.outputs.new == 'true'
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.version.outputs.new == 'true'
+
+      - name: Decode signing key
+        if: steps.version.outputs.new == 'true'
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+        run: |
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "::warning::No SIGNING_KEYSTORE_BASE64 secret; the APK is signed with a throwaway debug key, so later releases won't install over it as updates."
+            exit 0
+          fi
+          # Pasted secrets often pick up a trailing newline or space; strip them.
+          trim() { printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+          store_pw=$(trim "$SIGNING_STORE_PASSWORD")
+          key_pw=$(trim "$SIGNING_KEY_PASSWORD")
+          alias=$(trim "$SIGNING_KEY_ALIAS")
+          echo "::add-mask::$store_pw"
+          echo "::add-mask::$key_pw"
+          # Tolerate line-wrapped base64 (e.g. from macOS `base64` without -b 0).
+          if ! printf '%s' "$SIGNING_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.jks"; then
+            echo "::error::SIGNING_KEYSTORE_BASE64 is not valid base64. Set it to the output of 'base64 -w0 release.jks' (Linux) or 'base64 -i release.jks' (macOS)."
+            exit 1
+          fi
+          # Fingerprints and lengths only, never the values, to help match secrets to the key file.
+          echo "Keystore sha256 starts with $(sha256sum "$RUNNER_TEMP/release.jks" | cut -c1-16)"
+          echo "Store password length ${#store_pw}, key password length ${#key_pw}, alias length ${#alias}"
+          if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$store_pw" > /dev/null; then
+            echo "::error::The keystore does not open with SIGNING_STORE_PASSWORD."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$store_pw" -alias "$alias" > /dev/null; then
+            echo "::error::The keystore has no key named '$alias' (SIGNING_KEY_ALIAS)."
+            exit 1
+          fi
+          {
+            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.jks"
+            echo "SIGNING_STORE_PASSWORD=$store_pw"
+            echo "SIGNING_KEY_PASSWORD=$key_pw"
+            echo "SIGNING_KEY_ALIAS=$alias"
+          } >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        if: steps.version.outputs.new == 'true'
+        run: |
+          ./gradlew :core:test :app:assembleRelease --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk "webOSControl-${{ steps.version.outputs.tag }}.apk"
+
+      - name: Publish GitHub Release
+        if: steps.version.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          tail -n +2 latest-notes.md > release-notes.md
+          # The tag goes on the default branch. Pinning it to an older commit ($GITHUB_SHA) fails
+          # with 403 when main has since changed a workflow file, because GITHUB_TOKEN can't
+          # create refs across workflow changes.
+          gh release create "$TAG" "webOSControl-$TAG.apk" \
+            --title "webOSControl $TAG" \
+            --notes-file release-notes.md \
+            --latest
