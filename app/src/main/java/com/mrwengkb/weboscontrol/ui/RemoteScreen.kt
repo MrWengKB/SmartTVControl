@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Input
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -60,6 +62,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -205,11 +208,32 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
                 RemoteKey(Icons.Default.FastForward, "Fast forward", onClick = vm::fastForward)
             }
 
+            var colorHelp by remember { mutableStateOf<String?>(null) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                ColorKey(Color(0xFFE5484D), "Red") { vm.button(TvButton.RED) }
-                ColorKey(Color(0xFF30A46C), "Green") { vm.button(TvButton.GREEN) }
-                ColorKey(Color(0xFFFFC53D), "Yellow") { vm.button(TvButton.YELLOW) }
-                ColorKey(Color(0xFF3E63DD), "Blue") { vm.button(TvButton.BLUE) }
+                ColorKey(Color(0xFFE5484D), "Red", LiveTvColorLabels.RED, onHelp = { colorHelp = "Red" }) { vm.button(TvButton.RED) }
+                ColorKey(Color(0xFF30A46C), "Green", LiveTvColorLabels.GREEN, onHelp = { colorHelp = "Green" }) { vm.button(TvButton.GREEN) }
+                ColorKey(Color(0xFFFFC53D), "Yellow", LiveTvColorLabels.YELLOW, onHelp = { colorHelp = "Yellow" }) { vm.button(TvButton.YELLOW) }
+                ColorKey(Color(0xFF3E63DD), "Blue", LiveTvColorLabels.BLUE, onHelp = { colorHelp = "Blue" }) { vm.button(TvButton.BLUE) }
+            }
+            colorHelp?.let { name ->
+                val liveTv = when (name) {
+                    "Red" -> LiveTvColorLabels.RED
+                    "Green" -> LiveTvColorLabels.GREEN
+                    "Yellow" -> LiveTvColorLabels.YELLOW
+                    else -> LiveTvColorLabels.BLUE
+                }
+                AlertDialog(
+                    onDismissRequest = { colorHelp = null },
+                    title = { Text("$name button") },
+                    text = {
+                        Text(
+                            (if (liveTv != null) "In Live TV: $liveTv.\n\n" else "") +
+                                "What the colour buttons do depends on what's on screen. Each app, the TV guide " +
+                                "and teletext can use them differently, so look for coloured hints at the bottom of the TV screen.",
+                        )
+                    },
+                    confirmButton = { TextButton(onClick = { colorHelp = null }) { Text("OK") } },
+                )
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -290,19 +314,50 @@ fun RemoteKey(
     }
 }
 
+/**
+ * What the colour buttons do in Live TV. Null shows just the colour name. Other apps use the
+ * buttons differently, which the ? next to each button explains.
+ */
+private object LiveTvColorLabels {
+    val RED: String? = null
+    val GREEN: String? = null
+    val YELLOW: String? = null
+    val BLUE: String? = null
+}
+
 @Composable
-private fun ColorKey(color: Color, label: String, onClick: () -> Unit) {
+private fun ColorKey(color: Color, name: String, liveTvLabel: String?, onHelp: () -> Unit, onClick: () -> Unit) {
     val haptics = LocalHapticFeedback.current
-    Box(
-        Modifier
-            .size(width = 56.dp, height = 22.dp)
-            .clip(RoundedCornerShape(11.dp))
-            .background(color)
-            .clickable(onClickLabel = label) {
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            },
-    )
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(width = 48.dp, height = 22.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(color)
+                    .clickable(onClickLabel = name) {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onClick()
+                    },
+            )
+            IconButton(onClick = onHelp, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.HelpOutline,
+                    contentDescription = "What the $name button does",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            liveTvLabel ?: name,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(76.dp),
+        )
+    }
 }
 
 @Composable
