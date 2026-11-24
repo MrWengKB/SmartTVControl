@@ -66,11 +66,15 @@ data class UiState(
     val waking: Boolean = false,
     /** Non-null while we are registered as the TV's keyboard; focused when a text box is active. */
     val keyboard: KeyboardState? = null,
+    /** A newer release to offer, shown as a dialog. */
+    val update: UpdateInfo? = null,
+    val checkingUpdate: Boolean = false,
     val message: String? = null,
 )
 
 class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private val store = TvStore(app)
+    private val updates = UpdateChecker(app)
     private val _ui = MutableStateFlow(UiState(saved = store.all()))
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
@@ -96,6 +100,8 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+        // Debug builds are test builds; only release builds look for updates on their own.
+        if (!BuildConfig.DEBUG) checkForUpdates(manual = false)
         val last = store.last()
         if (last != null) {
             _ui.update { it.copy(screen = Screen.Remote, current = last) }
@@ -369,6 +375,42 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    // ---- Updates ---------------------------------------------------------------------------
+
+    /**
+     * Looks for a newer release. The automatic check on launch stays silent when there is
+     * nothing new or the network fails, and skips a version the user ignored; a manual check
+     * reports the result and offers ignored versions again.
+     */
+    fun checkForUpdates(manual: Boolean = true) {
+        if (_ui.value.checkingUpdate) return
+        _ui.update { it.copy(checkingUpdate = true) }
+        viewModelScope.launch {
+            try {
+                val found = updates.latestNewerThan(BuildConfig.VERSION_NAME)
+                when {
+                    found == null -> if (manual) showMessage("You have the latest version (${BuildConfig.VERSION_NAME}).")
+                    !manual && found.version == updates.ignoredVersion -> Unit
+                    else -> _ui.update { it.copy(update = found) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (manual) showMessage("Couldn't check for updates: ${e.message}")
+            } finally {
+                _ui.update { it.copy(checkingUpdate = false) }
+            }
+        }
+    }
+
+    /** "Ignore": don't offer this version again automatically. */
+    fun ignoreUpdate() {
+        _ui.value.update?.let { updates.ignoredVersion = it.version }
+        _ui.update { it.copy(update = null) }
+    }
+
+    fun dismissUpdate() = _ui.update { it.copy(update = null) }
 
     fun showMessage(text: String) = _ui.update { it.copy(message = text) }
     fun messageShown() = _ui.update { it.copy(message = null) }

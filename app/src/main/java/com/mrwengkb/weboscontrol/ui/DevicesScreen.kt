@@ -32,7 +32,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -47,7 +51,15 @@ import com.mrwengkb.weboscontrol.UiState
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicesScreen(state: UiState, vm: RemoteViewModel) {
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(state.message) {
+        state.message?.let {
+            snackbar.showSnackbar(it)
+            vm.messageShown()
+        }
+    }
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Choose a TV") },
@@ -109,12 +121,18 @@ fun DevicesScreen(state: UiState, vm: RemoteViewModel) {
             item { Spacer(Modifier.size(8.dp)) }
             item { ManualEntry(onAdd = vm::addManually) }
             item {
-                Text(
-                    "Version ${com.mrwengkb.weboscontrol.BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 24.dp),
-                )
+                Row(Modifier.padding(top = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Version ${com.mrwengkb.weboscontrol.BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.TextButton(
+                        onClick = { vm.checkForUpdates() },
+                        enabled = !state.checkingUpdate,
+                    ) { Text(if (state.checkingUpdate) "Checking…" else "Check for updates") }
+                }
             }
         }
     }

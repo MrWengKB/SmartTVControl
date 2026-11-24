@@ -1,3 +1,8 @@
+# v0.1.3
+- Check for updates: on launch the app looks for a newer release and asks whether to Update or Ignore
+- "Check for updates" button at the bottom of the TV list
+- Test (debug) builds install as a separate app, so they no longer block release updates
+
 # v0.1.2
 - Fix typing on the TV (e.g. YouTube search): the app now registers as the TV's remote keyboard
 - Letters and backspaces are sent live as you type; Enter on the phone keyboard submits

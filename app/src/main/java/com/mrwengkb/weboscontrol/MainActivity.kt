@@ -13,6 +13,7 @@ import com.mrwengkb.weboscontrol.core.WebOsClient
 import com.mrwengkb.weboscontrol.ui.DevicesScreen
 import com.mrwengkb.weboscontrol.ui.RemoteScreen
 import com.mrwengkb.weboscontrol.ui.RemoteTheme
+import com.mrwengkb.weboscontrol.ui.UpdateDialog
 
 class MainActivity : ComponentActivity() {
     private val viewModel: RemoteViewModel by viewModels()
@@ -29,6 +30,9 @@ class MainActivity : ComponentActivity() {
                         DevicesScreen(state, viewModel)
                     }
                     Screen.Remote -> RemoteScreen(state, viewModel)
+                }
+                state.update?.let { update ->
+                    UpdateDialog(update, onIgnore = viewModel::ignoreUpdate, onDismiss = viewModel::dismissUpdate)
                 }
             }
         }
