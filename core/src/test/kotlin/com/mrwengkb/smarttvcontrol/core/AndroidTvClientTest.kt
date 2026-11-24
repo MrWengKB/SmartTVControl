@@ -216,14 +216,27 @@ class AndroidTvClientTest {
         assertEquals("market://launch?id=com.netflix.ninja", tv.nextReceived(90).message(90)!!.string(1))
 
         // The TV announces a text box; text then goes in as a batch edit with its counters.
-        tv.push { message(21) { int(1, 5); int(2, 7) } }
-        tv.push { message(22) { message(2) { int(1, 7); string(2, "") } } }
-        withTimeout(5_000) { c.keyboardShown.first() }
+        // Counters come from the key inject; the TV's own batch edit must not override them.
+        tv.push { message(20) { message(1) { int(1, 5); string(12, "org.jellyfin.androidtv") }; message(2) { int(1, 141) } } }
+        tv.push { message(21) { int(1, 1); int(2, 1) } }
+        tv.push { message(22) { message(2) { int(1, 141); string(2, "") } } }
+        withTimeout(5_000) { c.imeLog.first { it.lastOrNull()?.startsWith("text box shown") == true } }
         assertTrue(c.hasTextField)
+        assertEquals("org.jellyfin.androidtv", c.currentApp.value)
         c.insertText("hi")
         val edit = tv.nextReceived(21).message(21)!!
         assertEquals(5, edit.int(1))
-        assertEquals(7, edit.int(2))
+        assertEquals(141, edit.int(2))
+
+        // An app reporting zero counters clears them; a later batch edit then fills them in.
+        tv.push { message(20) { message(1) { string(12, "com.google.android.youtube.tv") } } }
+        tv.push { message(21) { int(1, 9); int(2, 4) } }
+        tv.push { message(22) { message(2) { string(2, "") } } }
+        withTimeout(5_000) { c.imeLog.first { it.lastOrNull()?.startsWith("text box shown") == true } }
+        c.insertText("a")
+        val edit2 = tv.nextReceived(21).message(21)!!
+        assertEquals(9, edit2.int(1))
+        assertEquals(0, edit2.int(2))
         val info = edit.messages(3).single().message(2)!!
         assertEquals("hi", info.string(3))
         assertEquals(2, info.int(1))

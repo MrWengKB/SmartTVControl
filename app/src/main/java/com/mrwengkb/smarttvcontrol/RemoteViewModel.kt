@@ -89,6 +89,10 @@ data class UiState(
     val chooseOsFor: String? = null,
     /** Checking which OS a typed IP runs. */
     val probing: Boolean = false,
+    /** Android TV: recent text-input events, shown in the keyboard sheet to diagnose typing. */
+    val imeLog: List<String> = emptyList(),
+    /** Android TV: type with key presses instead of the TV's text input. */
+    val typeWithKeys: Boolean = false,
 ) {
     val isAndroidTv: Boolean get() = current?.platform == TvPlatform.ANDROID_TV
 }
@@ -426,6 +430,8 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setTypeWithKeys(on: Boolean) = _ui.update { it.copy(typeWithKeys = on) }
+
     fun cancelPairing() {
         atvPairing?.close()
         atvPairing = null
@@ -437,6 +443,9 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
             c.volume.collect { v ->
                 if (v != null) _ui.update { it.copy(volume = VolumeStatus(v.level, v.muted)) }
             }
+        }
+        sessionJobs += viewModelScope.launch {
+            c.imeLog.collect { log -> _ui.update { it.copy(imeLog = log) } }
         }
         sessionJobs += viewModelScope.launch {
             c.keyboardShown.collect {
@@ -545,7 +554,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         if (isAndroidTv) {
             atvTyping.trySend { c ->
                 repeat(delete) { c.key(AndroidKey.DEL) }
-                if (c.hasTextField) {
+                if (c.hasTextField && !_ui.value.typeWithKeys) {
                     // The TV told us about its text box: insert the new text at its cursor.
                     c.insertText(insert)
                 } else {

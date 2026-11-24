@@ -239,7 +239,7 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
             androidTv = state.isAndroidTv,
         )
         Sheet.Inputs -> InputsSheet(state.inputs, onPick = { vm.switchInput(it); sheet = null }, onDismiss = { sheet = null })
-        Sheet.Keyboard -> KeyboardSheet(vm, state.keyboard, onDismiss = { sheet = null })
+        Sheet.Keyboard -> KeyboardSheet(vm, state.keyboard, onDismiss = { sheet = null }, androidTv = state.takeIf { it.isAndroidTv })
         Sheet.Numbers -> NumberSheet(vm, onDismiss = { sheet = null })
         null -> Unit
     }

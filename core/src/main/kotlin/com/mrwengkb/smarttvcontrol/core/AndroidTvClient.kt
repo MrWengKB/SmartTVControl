@@ -151,6 +151,16 @@ class AndroidTvClient(
 
     @Volatile private var activeFeatures: Int = FEATURES
     @Volatile private var imeCounter: Int? = null
+    @Volatile private var hasImeCounter = false
+    @Volatile private var hasFieldCounter = false
+
+    /** The last few text-input events, shown in the app to help diagnose typing problems. */
+    private val _imeLog = MutableStateFlow<List<String>>(emptyList())
+    val imeLog: StateFlow<List<String>> = _imeLog.asStateFlow()
+
+    private fun debug(line: String) {
+        _imeLog.value = (_imeLog.value + line).takeLast(6)
+    }
     @Volatile private var fieldCounter: Int? = null
 
     val isConnected: Boolean get() = socket != null && _state.value == State.Connected
@@ -255,23 +265,36 @@ class AndroidTvClient(
                     msg.has(SET_VOLUME_LEVEL) -> msg.message(SET_VOLUME_LEVEL)?.let { v ->
                         _volume.value = AndroidTvVolume(v.int(7) ?: 0, v.int(6) ?: 0, v.bool(8) ?: false)
                     }
+                    // Text box counters follow androidtvremote2: remote_ime_key_inject (sent when
+                    // the foreground app changes) sets both, and clears them when an app reports
+                    // zeros (protobuf leaves zero fields out). remote_ime_batch_edit from the TV
+                    // only fills in a counter the key inject didn't give, and never overrides it.
                     msg.has(IME_KEY_INJECT) -> msg.message(IME_KEY_INJECT)?.let { inject ->
-                        inject.message(1)?.let { app ->
-                            app.string(12)?.let { _currentApp.value = it }
-                            app.int(1)?.let { imeCounter = it }
-                        }
-                        inject.message(2)?.int(1)?.let { fieldCounter = it }
+                        val app = inject.message(1)
+                        app?.string(12)?.let { _currentApp.value = it }
+                        imeCounter = app?.int(1) ?: 0
+                        fieldCounter = inject.message(2)?.int(1) ?: 0
+                        hasImeCounter = imeCounter != 0
+                        hasFieldCounter = fieldCounter != 0
+                        debug("key inject: app ${app?.string(12)}, counters $imeCounter/$fieldCounter")
                     }
                     msg.has(IME_BATCH_EDIT) -> msg.message(IME_BATCH_EDIT)?.let { edit ->
-                        edit.int(1)?.let { imeCounter = it }
-                        edit.int(2)?.let { fieldCounter = it }
+                        if (!hasImeCounter) imeCounter = edit.int(1) ?: 0
+                        if (!hasFieldCounter) fieldCounter = edit.int(2) ?: 0
+                        debug("TV batch edit ${edit.int(1) ?: 0}/${edit.int(2) ?: 0}, using $imeCounter/$fieldCounter")
                     }
                     msg.has(IME_SHOW_REQUEST) -> {
-                        msg.message(IME_SHOW_REQUEST)?.message(2)?.int(1)?.let { fieldCounter = it }
+                        val status = msg.message(IME_SHOW_REQUEST)?.message(2)
+                        if (status != null) {
+                            fieldCounter = status.int(1) ?: 0
+                            hasFieldCounter = true
+                        }
                         if (imeCounter == null) imeCounter = 0
                         if (fieldCounter == null) fieldCounter = 0
+                        debug("text box shown, counters $imeCounter/$fieldCounter")
                         _keyboardShown.tryEmit(Unit)
                     }
+                    msg.has(ERROR) -> debug("TV reported an error")
                 }
             }
         } catch (e: Exception) {
@@ -317,6 +340,7 @@ class AndroidTvClient(
         if (text.isEmpty()) return
         val ime = imeCounter ?: 0
         val field = fieldCounter ?: 0
+        debug("sent \"$text\" with counters $ime/$field")
         sendAsync(ProtoWriter().message(IME_BATCH_EDIT) {
             int(1, ime)
             int(2, field)
@@ -339,6 +363,8 @@ class AndroidTvClient(
         scope = null
         imeCounter = null
         fieldCounter = null
+        hasImeCounter = false
+        hasFieldCounter = false
         if (_state.value !is State.Failed) _state.value = State.Disconnected
     }
 

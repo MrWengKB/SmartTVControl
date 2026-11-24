@@ -56,6 +56,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mrwengkb.smarttvcontrol.RemoteViewModel
+import com.mrwengkb.smarttvcontrol.UiState
+import androidx.compose.material3.Switch
 import com.mrwengkb.smarttvcontrol.core.AppInfo
 import com.mrwengkb.smarttvcontrol.core.InputInfo
 import com.mrwengkb.smarttvcontrol.core.KeyboardState
@@ -149,7 +151,7 @@ fun InputsSheet(inputs: List<InputInfo>?, onPick: (InputInfo) -> Unit, onDismiss
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KeyboardSheet(vm: RemoteViewModel, keyboard: KeyboardState?, onDismiss: () -> Unit) {
+fun KeyboardSheet(vm: RemoteViewModel, keyboard: KeyboardState?, onDismiss: () -> Unit, androidTv: UiState? = null) {
     // What we've typed into the TV's current text box. Every change is sent as you type.
     var text by rememberSaveable { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
@@ -197,6 +199,22 @@ fun KeyboardSheet(vm: RemoteViewModel, keyboard: KeyboardState?, onDismiss: () -
                     }
                 }
                 RemoteKey(Icons.AutoMirrored.Filled.KeyboardReturn, "Enter", onClick = vm::sendEnter)
+            }
+            if (androidTv != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Type with key presses (letters, digits, space)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = androidTv.typeWithKeys, onCheckedChange = vm::setTypeWithKeys)
+                }
+                // What the TV said about its text boxes, to help find typing problems.
+                Text(
+                    "TV text input: " + androidTv.imeLog.ifEmpty { listOf("no messages yet") }.joinToString("\n"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
