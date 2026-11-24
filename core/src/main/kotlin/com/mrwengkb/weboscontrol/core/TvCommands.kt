@@ -2,6 +2,7 @@ package com.mrwengkb.weboscontrol.core
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -14,6 +15,9 @@ data class VolumeStatus(val volume: Int?, val muted: Boolean)
 data class AppInfo(val id: String, val title: String, val iconUrl: String?)
 data class InputInfo(val id: String, val label: String, val connected: Boolean)
 data class TvInfo(val modelName: String?, val macAddress: String?)
+
+/** What the TV reports about its on-screen text box while we are its remote keyboard. */
+data class KeyboardState(val focused: Boolean, val password: Boolean = false, val contentType: String? = null)
 
 /** Well-known SSAP endpoints. */
 object Ssap {
@@ -38,6 +42,7 @@ object Ssap {
     const val INSERT_TEXT = "ssap://com.webos.service.ime/insertText"
     const val DELETE_CHARACTERS = "ssap://com.webos.service.ime/deleteCharacters"
     const val SEND_ENTER = "ssap://com.webos.service.ime/sendEnterKey"
+    const val REGISTER_REMOTE_KEYBOARD = "ssap://com.webos.service.ime/registerRemoteKeyboard"
     const val SYSTEM_INFO = "ssap://system/getSystemInfo"
     const val CONNECTION_INFO = "ssap://com.webos.service.connectionmanager/getinfo"
     const val SW_INFO = "ssap://com.webos.service.update/getCurrentSWInformation"
@@ -88,6 +93,27 @@ fun parseInputs(payload: JsonObject): List<InputInfo> =
         val id = d.string("id") ?: return@mapNotNull null
         InputInfo(id, d.string("label") ?: id, d.bool("connected") ?: true)
     }
+
+/** Parses a registerRemoteKeyboard update; null for the initial "subscribed" reply. */
+fun parseKeyboard(payload: JsonObject): KeyboardState? {
+    val widget = payload["currentWidget"] as? JsonObject ?: return null
+    return KeyboardState(
+        focused = widget.bool("focus") ?: false,
+        password = widget.bool("hiddenText") ?: false,
+        contentType = widget.string("contentType"),
+    )
+}
+
+/**
+ * How to turn the text the TV has into [new]: delete this many characters from the end, then
+ * insert this text. Typing and backspacing at the end, the common case, cost one small step.
+ */
+fun textEdit(old: String, new: String): Pair<Int, String> {
+    var common = 0
+    val max = minOf(old.length, new.length)
+    while (common < max && old[common] == new[common]) common++
+    return (old.length - common) to new.substring(common)
+}
 
 /** Finds a MAC address in the connection manager reply, preferring the active interface. */
 fun parseMac(connectionInfo: JsonObject?, swInfo: JsonObject?): String? {
@@ -140,6 +166,13 @@ suspend fun WebOsClient.insertText(text: String) =
 suspend fun WebOsClient.deleteCharacters(count: Int) =
     request(Ssap.DELETE_CHARACTERS, buildJsonObject { put("count", count) })
 suspend fun WebOsClient.sendEnter() = request(Ssap.SEND_ENTER)
+
+/**
+ * Registers this app as the TV's remote keyboard and reports when a text box gains or loses
+ * focus. The TV only accepts insertText/deleteCharacters while this subscription is open.
+ */
+fun WebOsClient.keyboardUpdates(): Flow<KeyboardState> =
+    subscribe(Ssap.REGISTER_REMOTE_KEYBOARD).mapNotNull(::parseKeyboard)
 
 /** Model name and MAC address (the MAC is needed to turn the TV on with Wake-on-LAN). */
 suspend fun WebOsClient.tvInfo(): TvInfo {

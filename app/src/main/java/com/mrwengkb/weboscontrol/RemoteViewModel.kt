@@ -7,6 +7,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrwengkb.weboscontrol.core.AppInfo
 import com.mrwengkb.weboscontrol.core.InputInfo
+import com.mrwengkb.weboscontrol.core.KeyboardState
+import com.mrwengkb.weboscontrol.core.keyboardUpdates
+import com.mrwengkb.weboscontrol.core.textEdit
 import com.mrwengkb.weboscontrol.core.PointerSocket
 import com.mrwengkb.weboscontrol.core.SsdpDiscovery
 import com.mrwengkb.weboscontrol.core.TvDevice
@@ -36,6 +39,7 @@ import com.mrwengkb.weboscontrol.core.volumeUpdates
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,6 +64,8 @@ data class UiState(
     val apps: List<AppInfo>? = null,
     val inputs: List<InputInfo>? = null,
     val waking: Boolean = false,
+    /** Non-null while we are registered as the TV's keyboard; focused when a text box is active. */
+    val keyboard: KeyboardState? = null,
     val message: String? = null,
 )
 
@@ -74,7 +80,22 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private var pointer: PointerSocket? = null
     private val pointerMutex = Mutex()
 
+    /** Text edits go to the TV one at a time, in order, so fast typing doesn't get scrambled. */
+    private val typing = Channel<suspend (WebOsClient) -> Unit>(Channel.UNLIMITED)
+
     init {
+        viewModelScope.launch {
+            for (edit in typing) {
+                val c = client?.takeIf { it.isConnected } ?: continue
+                try {
+                    edit(c)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    showMessage(e.message ?: "Typing failed")
+                }
+            }
+        }
         val last = store.last()
         if (last != null) {
             _ui.update { it.copy(screen = Screen.Remote, current = last) }
@@ -202,6 +223,15 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         sessionJobs += viewModelScope.launch {
             runCatching { c.volumeUpdates().collect { v -> _ui.update { it.copy(volume = v) } } }
         }
+        sessionJobs += viewModelScope.launch {
+            try {
+                c.keyboardUpdates().collect { k -> _ui.update { it.copy(keyboard = k) } }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Older TVs may not support the remote keyboard; typing then falls back to plain insertText.
+            }
+        }
         viewModelScope.launch { ensurePointer() }
     }
 
@@ -214,7 +244,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         pointer = null
         client?.close()
         client = null
-        _ui.update { it.copy(connection = WebOsClient.State.Disconnected, volume = null) }
+        _ui.update { it.copy(connection = WebOsClient.State.Disconnected, volume = null, keyboard = null) }
     }
 
     private suspend fun ensurePointer(): PointerSocket? = pointerMutex.withLock {
@@ -278,9 +308,23 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     fun fastForward() = command { it.fastForward() }
     fun launchApp(app: AppInfo) = command { it.launchApp(app.id) }
     fun switchInput(input: InputInfo) = command { it.switchInput(input.id) }
-    fun sendText(text: String) = command { if (text.isNotEmpty()) it.insertText(text) }
-    fun sendEnter() = command { it.sendEnter() }
-    fun backspace() = command { it.deleteCharacters(1) }
+    /** Mirrors an edit of the phone's text field onto the TV's focused text box. */
+    fun typed(old: String, new: String) {
+        val (delete, insert) = textEdit(old, new)
+        if (delete == 0 && insert.isEmpty()) return
+        typing.trySend { c ->
+            if (delete > 0) c.deleteCharacters(delete)
+            if (insert.isNotEmpty()) c.insertText(insert)
+        }
+    }
+
+    fun sendEnter() {
+        typing.trySend { it.sendEnter() }
+    }
+
+    fun backspace() {
+        typing.trySend { it.deleteCharacters(1) }
+    }
 
     fun loadApps() = command { c -> _ui.update { it.copy(apps = c.listApps()) } }
     fun loadInputs() = command { c -> _ui.update { it.copy(inputs = c.listInputs()) } }

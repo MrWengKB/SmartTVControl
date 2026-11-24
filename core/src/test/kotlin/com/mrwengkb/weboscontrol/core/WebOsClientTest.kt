@@ -81,7 +81,10 @@ class WebOsClientTest {
                 }
                 else -> reply(ws, """{"type":"response","id":"$id","payload":{"returnValue":true}}""")
             }
-            "subscribe" -> {
+            "subscribe" -> if (msg["uri"]!!.jsonPrimitive.content == Ssap.REGISTER_REMOTE_KEYBOARD) {
+                reply(ws, """{"type":"response","id":"$id","payload":{"returnValue":true,"subscribed":true}}""")
+                reply(ws, """{"type":"response","id":"$id","payload":{"currentWidget":{"focus":true,"contentType":"text"}}}""")
+            } else {
                 reply(ws, """{"type":"response","id":"$id","payload":{"returnValue":true,"volume":5,"muted":false}}""")
             }
         }
@@ -152,6 +155,17 @@ class WebOsClientTest {
         client.connect(clientKey = "STORED")
         val first = withTimeout(3_000) { client.volumeUpdates().first() }
         assertEquals(VolumeStatus(5, false), first)
+        client.close()
+    }
+
+    @Test
+    fun keyboardSubscriptionReportsFocus() = runBlocking {
+        tv = pairingTv
+        enqueueTv()
+        val client = client()
+        client.connect(clientKey = "STORED")
+        val state = withTimeout(3_000) { client.keyboardUpdates().first() }
+        assertEquals(KeyboardState(focused = true, contentType = "text"), state)
         client.close()
     }
 

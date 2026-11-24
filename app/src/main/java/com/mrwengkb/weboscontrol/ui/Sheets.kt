@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,19 +36,26 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mrwengkb.weboscontrol.RemoteViewModel
 import com.mrwengkb.weboscontrol.core.AppInfo
 import com.mrwengkb.weboscontrol.core.InputInfo
+import com.mrwengkb.weboscontrol.core.KeyboardState
 import com.mrwengkb.weboscontrol.core.TvButton
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -106,32 +114,53 @@ fun InputsSheet(inputs: List<InputInfo>?, onPick: (InputInfo) -> Unit, onDismiss
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KeyboardSheet(vm: RemoteViewModel, onDismiss: () -> Unit) {
+fun KeyboardSheet(vm: RemoteViewModel, keyboard: KeyboardState?, onDismiss: () -> Unit) {
+    // What we've typed into the TV's current text box. Every change is sent as you type.
     var text by rememberSaveable { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(keyboard?.focused) {
+        // A newly focused text box on the TV starts empty from our point of view.
+        if (keyboard?.focused == true) text = ""
+    }
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
-            Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).navigationBarsPadding(),
+            Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).navigationBarsPadding().imePadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SheetTitle("Type on the TV")
             Text(
-                "Select a text box on the TV first, then type here.",
+                when (keyboard?.focused) {
+                    true -> "The TV's text box is ready. Letters appear on the TV as you type."
+                    false -> "Select a text box on the TV (for example YouTube search) and start typing."
+                    null -> "Select a text box on the TV, then type here."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedTextField(
                 value = text,
-                onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth(),
+                onValueChange = { new ->
+                    vm.typed(text, new)
+                    text = new
+                },
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
                 singleLine = true,
-                label = { Text("Text to send") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { vm.sendText(text); text = "" }),
+                label = { Text("Text") },
+                visualTransformation = if (keyboard?.password == true) PasswordVisualTransformation() else VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { vm.sendEnter() }),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilledTonalButton(onClick = { vm.sendText(text); text = "" }, enabled = text.isNotEmpty()) { Text("Send") }
+                TextButton(onClick = { vm.typed(text, ""); text = "" }, enabled = text.isNotEmpty()) { Text("Clear") }
                 Spacer(Modifier.weight(1f))
-                RemoteKey(Icons.AutoMirrored.Filled.Backspace, "Delete a character", onClick = vm::backspace)
+                RemoteKey(Icons.AutoMirrored.Filled.Backspace, "Delete a character") {
+                    if (text.isNotEmpty()) {
+                        vm.typed(text, text.dropLast(1)); text = text.dropLast(1)
+                    } else {
+                        vm.backspace()
+                    }
+                }
                 RemoteKey(Icons.AutoMirrored.Filled.KeyboardReturn, "Enter", onClick = vm::sendEnter)
             }
         }

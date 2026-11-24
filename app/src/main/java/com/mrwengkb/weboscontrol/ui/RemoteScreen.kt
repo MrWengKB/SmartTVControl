@@ -96,6 +96,11 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
     var sheet by rememberSaveable { mutableStateOf<Sheet?>(null) }
     var touchpad by rememberSaveable { mutableStateOf(false) }
 
+    // Open the keyboard by itself when a text box gets focus on the TV (e.g. YouTube search).
+    LaunchedEffect(state.keyboard?.focused) {
+        if (state.keyboard?.focused == true && sheet == null) sheet = Sheet.Keyboard
+    }
+
     LaunchedEffect(state.message) {
         state.message?.let {
             snackbar.showSnackbar(it)
@@ -213,7 +218,7 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
     when (sheet) {
         Sheet.Apps -> AppsSheet(state.apps, onPick = { vm.launchApp(it); sheet = null }, onDismiss = { sheet = null })
         Sheet.Inputs -> InputsSheet(state.inputs, onPick = { vm.switchInput(it); sheet = null }, onDismiss = { sheet = null })
-        Sheet.Keyboard -> KeyboardSheet(vm, onDismiss = { sheet = null })
+        Sheet.Keyboard -> KeyboardSheet(vm, state.keyboard, onDismiss = { sheet = null })
         Sheet.Numbers -> NumberSheet(vm, onDismiss = { sheet = null })
         null -> Unit
     }

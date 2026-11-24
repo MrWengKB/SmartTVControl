@@ -1,3 +1,8 @@
+# v0.1.2
+- Fix typing on the TV (e.g. YouTube search): the app now registers as the TV's remote keyboard
+- Letters and backspaces are sent live as you type; Enter on the phone keyboard submits
+- The keyboard opens by itself when a text box is selected on the TV
+
 # v0.1.1
 - debug
 - version numbering convention

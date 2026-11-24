@@ -48,4 +48,23 @@ class MiscTest {
         assertEquals("bb:bb:bb:bb:bb:bb", parseMac(conn, null))
         assertNull(parseMac(null, null))
     }
+
+    @Test
+    fun parsesKeyboardFocus() {
+        assertNull(parseKeyboard(Json.parseToJsonElement("""{"returnValue":true,"subscribed":true}""").jsonObject))
+        val focused = parseKeyboard(Json.parseToJsonElement(
+            """{"currentWidget":{"focus":true,"contentType":"text","hiddenText":false,"cursorPosition":0}}"""
+        ).jsonObject)
+        assertEquals(KeyboardState(focused = true, password = false, contentType = "text"), focused)
+    }
+
+    @Test
+    fun computesTextEdits() {
+        assertEquals(0 to "a", textEdit("", "a"))
+        assertEquals(0 to "c", textEdit("ab", "abc"))
+        assertEquals(1 to "", textEdit("abc", "ab"))
+        assertEquals(3 to "xyz", textEdit("abc", "xyz"))
+        assertEquals(1 to "Xd", textEdit("abc", "abXd"))
+        assertEquals(0 to "", textEdit("same", "same"))
+    }
 }
