@@ -47,6 +47,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.mrwengkb.smarttvcontrol.RemoteViewModel
 import com.mrwengkb.smarttvcontrol.UiState
+import com.mrwengkb.smarttvcontrol.core.TvPlatform
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,7 +98,7 @@ fun DevicesScreen(state: UiState, vm: RemoteViewModel) {
                     val online = state.discovered.any { it.host == tv.host }
                     DeviceRow(
                         title = tv.name,
-                        subtitle = tv.host + if (online) " · on the network" else "",
+                        subtitle = listOf(tv.platform.label, tv.host).joinToString(" · ") + if (online) " · on the network" else "",
                         onClick = { vm.select(tv) },
                         onForget = { vm.forget(tv) },
                     )
@@ -114,12 +117,12 @@ fun DevicesScreen(state: UiState, vm: RemoteViewModel) {
             items(newDevices, key = { "found-" + it.host }) { device ->
                 DeviceRow(
                     title = device.name,
-                    subtitle = listOfNotNull(device.modelName, device.host).joinToString(" · "),
+                    subtitle = listOfNotNull(device.platform.label, device.modelName, device.host).joinToString(" · "),
                     onClick = { vm.select(device) },
                 )
             }
             item { Spacer(Modifier.size(8.dp)) }
-            item { ManualEntry(onAdd = vm::addManually) }
+            item { ManualEntry(probing = state.probing, onAdd = vm::addManually) }
             item {
                 Row(Modifier.padding(top = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -136,6 +139,28 @@ fun DevicesScreen(state: UiState, vm: RemoteViewModel) {
             }
         }
     }
+    state.chooseOsFor?.let { host -> ChooseOsDialog(host, onPick = { vm.addWithPlatform(host, it) }, onDismiss = vm::dismissChooseOs) }
+}
+
+/** Shown when a typed IP doesn't answer on either OS's ports, e.g. because the TV is off. */
+@Composable
+private fun ChooseOsDialog(host: String, onPick: (TvPlatform) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Which TV is this?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("The TV at $host didn't answer, so the app couldn't tell what it runs. Choose its system:")
+                TvPlatform.entries.forEach { platform ->
+                    Card(Modifier.fillMaxWidth().clickable { onPick(platform) }) {
+                        Text(platform.label, Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -166,7 +191,7 @@ private fun DeviceRow(title: String, subtitle: String, onClick: () -> Unit, onFo
 }
 
 @Composable
-private fun ManualEntry(onAdd: (String) -> Unit) {
+private fun ManualEntry(probing: Boolean, onAdd: (String) -> Unit) {
     var host by rememberSaveable { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionTitle("Enter the TV's IP address")
@@ -181,7 +206,11 @@ private fun ManualEntry(onAdd: (String) -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
-            Box { Button(onClick = { onAdd(host) }, enabled = host.isNotBlank()) { Text("Connect") } }
+            Box {
+                Button(onClick = { onAdd(host) }, enabled = host.isNotBlank() && !probing) {
+                    if (probing) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Connect")
+                }
+            }
         }
     }
 }

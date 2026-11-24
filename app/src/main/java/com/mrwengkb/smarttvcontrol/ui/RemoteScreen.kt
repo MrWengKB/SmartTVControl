@@ -61,6 +61,13 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -99,6 +106,10 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
     // Open the keyboard by itself when a text box gets focus on the TV (e.g. YouTube search).
     LaunchedEffect(state.keyboard?.focused) {
         if (state.keyboard?.focused == true && sheet == null) sheet = Sheet.Keyboard
+    }
+    // Google TV announces each text box separately.
+    LaunchedEffect(state.keyboardRequest) {
+        if (state.keyboardRequest > 0 && sheet == null) sheet = Sheet.Keyboard
     }
 
     LaunchedEffect(state.message) {
@@ -151,7 +162,9 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
                     else Icon(Icons.Default.PowerSettingsNew, contentDescription = "Power")
                 }
                 Spacer(Modifier.weight(1f))
-                RemoteKey(Icons.AutoMirrored.Filled.Input, "Inputs") { vm.loadInputs(); sheet = Sheet.Inputs }
+                RemoteKey(Icons.AutoMirrored.Filled.Input, "Inputs") {
+                    if (state.isAndroidTv) vm.inputKey() else { vm.loadInputs(); sheet = Sheet.Inputs }
+                }
                 Spacer(Modifier.width(10.dp))
                 RemoteKey(Icons.Default.Apps, "Apps") { vm.loadApps(); sheet = Sheet.Apps }
                 Spacer(Modifier.width(10.dp))
@@ -160,12 +173,15 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
                 RemoteKey(Icons.Default.Dialpad, "Number pad") { sheet = Sheet.Numbers }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = !touchpad, onClick = { touchpad = false }, label = { Text("Arrows") })
-                FilterChip(selected = touchpad, onClick = { touchpad = true }, label = { Text("Touchpad") })
+            // Google TV has no pointer, so it only gets the arrow keys.
+            if (!state.isAndroidTv) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = !touchpad, onClick = { touchpad = false }, label = { Text("Arrows") })
+                    FilterChip(selected = touchpad, onClick = { touchpad = true }, label = { Text("Touchpad") })
+                }
             }
 
-            if (touchpad) Touchpad(vm) else DPad(vm)
+            if (touchpad && !state.isAndroidTv) Touchpad(vm) else DPad(vm)
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 RemoteKey(Icons.AutoMirrored.Filled.ArrowBack, "Back") { vm.button(TvButton.BACK) }
@@ -220,6 +236,7 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
             state.apps,
             onPick = { vm.launchApp(it); sheet = null },
             onDismiss = { sheet = null },
+            androidTv = state.isAndroidTv,
         )
         Sheet.Inputs -> InputsSheet(state.inputs, onPick = { vm.switchInput(it); sheet = null }, onDismiss = { sheet = null })
         Sheet.Keyboard -> KeyboardSheet(vm, state.keyboard, onDismiss = { sheet = null })
@@ -233,7 +250,8 @@ private fun statusText(state: UiState): String = when {
     else -> when (val c = state.connection) {
         WebOsClient.State.Connected -> "Connected · ${state.current?.host}"
         WebOsClient.State.Connecting -> "Connecting…"
-        WebOsClient.State.AwaitingPairing -> "Waiting for you to accept on the TV"
+        WebOsClient.State.AwaitingPairing ->
+            if (state.pairingCode) "Enter the code shown on the TV" else "Waiting for you to accept on the TV"
         WebOsClient.State.Disconnected -> "Not connected"
         is WebOsClient.State.Failed -> "Offline"
     }
@@ -243,6 +261,10 @@ private fun statusText(state: UiState): String = when {
 private fun ConnectionBanner(state: UiState, vm: RemoteViewModel) {
     val connection = state.connection
     if (connection == WebOsClient.State.Connected || state.waking) return
+    if (state.pairingCode) {
+        PairingCodeCard(vm)
+        return
+    }
     val (text, showRetry) = when (connection) {
         WebOsClient.State.AwaitingPairing ->
             "Your TV is asking whether to allow this phone. Select Accept with the TV remote." to false
@@ -264,6 +286,39 @@ private fun ConnectionBanner(state: UiState, vm: RemoteViewModel) {
             if (showRetry) {
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = vm::reconnect) { Text("Connect") }
+            }
+        }
+    }
+}
+
+/** Google TV pairing: the TV shows a six-character code that the user types in here. */
+@Composable
+private fun PairingCodeCard(vm: RemoteViewModel) {
+    var code by rememberSaveable { mutableStateOf("") }
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Pair with your TV", style = MaterialTheme.typography.titleMedium)
+            Text("Your TV is showing a 6-character code. Type it here.", style = MaterialTheme.typography.bodyMedium)
+            OutlinedTextField(
+                value = code,
+                onValueChange = { new -> code = new.filter { it.isLetterOrDigit() }.uppercase().take(6) },
+                label = { Text("Code") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    keyboardType = KeyboardType.Ascii,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { if (code.length == 6) vm.submitPairingCode(code) }),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = vm::cancelPairing) { Text("Cancel") }
+                Button(onClick = { vm.submitPairingCode(code) }, enabled = code.length == 6) { Text("Pair") }
             }
         }
     }

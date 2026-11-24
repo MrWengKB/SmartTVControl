@@ -67,12 +67,14 @@ fun AppsSheet(
     apps: List<AppInfo>?,
     onPick: (AppInfo) -> Unit,
     onDismiss: () -> Unit,
+    androidTv: Boolean = false,
 ) {
     var confirm by remember { mutableStateOf<AppInfo?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetTitle("Apps")
         Text(
-            "Tap to open an app.",
+            if (androidTv) "Tap to open an app. Google TV doesn't share its app list, so these are common apps; " +
+                "one opens only if it's installed on the TV." else "Tap to open an app.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -91,7 +93,7 @@ fun AppsSheet(
                     Card(
                         Modifier.height(72.dp).combinedClickable(
                             onClick = { onPick(app) },
-                            onLongClick = { confirm = app },
+                            onLongClick = { if (!androidTv) confirm = app },
                             onLongClickLabel = "Uninstall",
                         ),
                     ) {

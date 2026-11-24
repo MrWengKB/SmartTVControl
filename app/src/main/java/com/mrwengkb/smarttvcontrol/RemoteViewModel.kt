@@ -3,9 +3,19 @@ package com.mrwengkb.smarttvcontrol
 import android.app.Application
 import android.content.Context
 import android.net.wifi.WifiManager
+import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.mrwengkb.smarttvcontrol.core.AndroidKey
+import com.mrwengkb.smarttvcontrol.core.AndroidTvApps
+import com.mrwengkb.smarttvcontrol.core.AndroidTvClient
+import com.mrwengkb.smarttvcontrol.core.AndroidTvIdentity
+import com.mrwengkb.smarttvcontrol.core.AndroidTvNotPairedException
+import com.mrwengkb.smarttvcontrol.core.AndroidTvPairing
+import com.mrwengkb.smarttvcontrol.core.AndroidTvWrongCodeException
 import com.mrwengkb.smarttvcontrol.core.AppInfo
+import com.mrwengkb.smarttvcontrol.core.TvPlatform
+import com.mrwengkb.smarttvcontrol.core.TvProbe
 import com.mrwengkb.smarttvcontrol.core.InputInfo
 import com.mrwengkb.smarttvcontrol.core.KeyboardState
 import com.mrwengkb.smarttvcontrol.core.keyboardUpdates
@@ -39,6 +49,7 @@ import com.mrwengkb.smarttvcontrol.core.volumeUpdates
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,7 +81,17 @@ data class UiState(
     val update: UpdateInfo? = null,
     val checkingUpdate: Boolean = false,
     val message: String? = null,
-)
+    /** Android TV: the TV is showing a pairing code for the user to type in. */
+    val pairingCode: Boolean = false,
+    /** Android TV: goes up each time the TV asks for text, so the keyboard opens by itself. */
+    val keyboardRequest: Int = 0,
+    /** A typed IP whose TV didn't answer, so the user picks its OS. */
+    val chooseOsFor: String? = null,
+    /** Checking which OS a typed IP runs. */
+    val probing: Boolean = false,
+) {
+    val isAndroidTv: Boolean get() = current?.platform == TvPlatform.ANDROID_TV
+}
 
 class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private val store = TvStore(app)
@@ -84,6 +105,13 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private var pointer: PointerSocket? = null
     private val pointerMutex = Mutex()
 
+    // Google TV / Android TV session (only one of client and atv is in use at a time).
+    private var atv: AndroidTvClient? = null
+    private var atvPairing: AndroidTvPairing? = null
+    private val identityMutex = Mutex()
+    private var identity: AndroidTvIdentity? = null
+    private val atvTyping = Channel<suspend (AndroidTvClient) -> Unit>(Channel.UNLIMITED)
+
     /** Text edits go to the TV one at a time, in order, so fast typing doesn't get scrambled. */
     private val typing = Channel<suspend (WebOsClient) -> Unit>(Channel.UNLIMITED)
 
@@ -91,6 +119,18 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             for (edit in typing) {
                 val c = client?.takeIf { it.isConnected } ?: continue
+                try {
+                    edit(c)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    showMessage(e.message ?: "Typing failed")
+                }
+            }
+        }
+        viewModelScope.launch {
+            for (edit in atvTyping) {
+                val c = atv?.takeIf { it.isConnected } ?: continue
                 try {
                     edit(c)
                 } catch (e: CancellationException) {
@@ -116,7 +156,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     fun onForeground() {
         val tv = _ui.value.current ?: return
         val state = _ui.value.connection
-        if (connectJob?.isActive != true && state !is WebOsClient.State.Connected) connect(tv)
+        if (connectJob?.isActive != true && state !is WebOsClient.State.Connected && !_ui.value.pairingCode) connect(tv)
     }
 
     /** Called when the app goes to the background: drop the connection to save battery. */
@@ -148,7 +188,13 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
             val lock = wifi.createMulticastLock("webos-discovery").apply { setReferenceCounted(false) }
             val found = try {
                 lock.acquire()
-                SsdpDiscovery.discover()
+                // webOS TVs answer SSDP; Google/Android TVs advertise over mDNS. Search both at once.
+                val androidTvs = async {
+                    runCatching { AndroidTvDiscovery(getApplication<Application>()).discover() }.getOrDefault(emptyList())
+                }
+                val webOs = SsdpDiscovery.discover()
+                val webOsHosts = webOs.map { it.host }.toSet()
+                (webOs + androidTvs.await().filterNot { it.host in webOsHosts }).sortedBy { it.name.lowercase() }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -163,21 +209,51 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     fun select(device: TvDevice) {
         val existing = store.all().firstOrNull { it.host == device.host }
-        val tv = existing?.copy(name = device.name) ?: SavedTv(host = device.host, name = device.name)
+        val tv = when {
+            existing == null -> SavedTv(host = device.host, name = device.name, platform = device.platform)
+            existing.platform == device.platform -> existing.copy(name = device.name)
+            // Same address, different OS (e.g. a new TV): start again with no old credentials.
+            else -> SavedTv(host = device.host, name = device.name, platform = device.platform)
+        }
         select(tv)
     }
 
     fun select(tv: SavedTv) {
+        _ui.update { it.copy(chooseOsFor = null) }
         store.save(tv)
         _ui.update { it.copy(screen = Screen.Remote, current = tv, saved = store.all(), apps = null, inputs = null) }
         connect(tv)
     }
 
+    /** Adds a TV by IP: checks which OS it runs from its open ports, or asks if it doesn't answer. */
     fun addManually(host: String) {
         val trimmed = host.trim()
-        if (trimmed.isEmpty()) return
-        select(TvDevice(host = trimmed, name = "LG TV ($trimmed)"))
+        if (trimmed.isEmpty() || _ui.value.probing) return
+        val known = _ui.value.discovered.firstOrNull { it.host == trimmed }
+        if (known != null) {
+            select(known)
+            return
+        }
+        _ui.update { it.copy(probing = true) }
+        viewModelScope.launch {
+            val platform = try {
+                TvProbe.detect(trimmed)
+            } finally {
+                _ui.update { it.copy(probing = false) }
+            }
+            if (platform == null) _ui.update { it.copy(chooseOsFor = trimmed) } else addWithPlatform(trimmed, platform)
+        }
     }
+
+    fun addWithPlatform(host: String, platform: TvPlatform) {
+        val name = when (platform) {
+            TvPlatform.WEBOS -> "LG TV ($host)"
+            TvPlatform.ANDROID_TV -> "Google TV ($host)"
+        }
+        select(TvDevice(host = host, name = name, platform = platform))
+    }
+
+    fun dismissChooseOs() = _ui.update { it.copy(chooseOsFor = null) }
 
     fun forget(tv: SavedTv) {
         store.remove(tv.host)
@@ -195,6 +271,10 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun connect(tv: SavedTv) {
+        if (tv.platform == TvPlatform.ANDROID_TV) {
+            connectAndroidTv(tv)
+            return
+        }
         disconnect()
         val c = WebOsClient(tv.host)
         client = c
@@ -250,8 +330,144 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         pointer = null
         client?.close()
         client = null
-        _ui.update { it.copy(connection = WebOsClient.State.Disconnected, volume = null, keyboard = null) }
+        atv?.close()
+        atv = null
+        atvPairing?.close()
+        atvPairing = null
+        _ui.update {
+            it.copy(connection = WebOsClient.State.Disconnected, volume = null, keyboard = null, pairingCode = false)
+        }
     }
+
+    // ---- Google TV / Android TV ---------------------------------------------------------------
+
+    private suspend fun androidTvIdentity(): AndroidTvIdentity = identityMutex.withLock {
+        identity ?: withContext(Dispatchers.Default) { store.androidTvIdentity() }.also { identity = it }
+    }
+
+    private fun AndroidTvClient.State.toUi(): WebOsClient.State = when (this) {
+        AndroidTvClient.State.Connected -> WebOsClient.State.Connected
+        AndroidTvClient.State.Connecting -> WebOsClient.State.Connecting
+        AndroidTvClient.State.Disconnected -> WebOsClient.State.Disconnected
+        is AndroidTvClient.State.Failed -> WebOsClient.State.Failed(message)
+    }
+
+    private fun connectAndroidTv(tv: SavedTv) {
+        disconnect()
+        _ui.update { it.copy(connection = WebOsClient.State.Connecting) }
+        connectJob = viewModelScope.launch {
+            val id = try {
+                androidTvIdentity()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _ui.update { it.copy(connection = WebOsClient.State.Failed("Couldn't create this phone's key: ${e.message}")) }
+                return@launch
+            }
+            val c = AndroidTvClient(tv.host, id, deviceModel = Build.MODEL ?: "Phone", deviceVendor = Build.MANUFACTURER ?: "Android")
+            atv = c
+            val stateJob = viewModelScope.launch {
+                c.state.collect { s -> if (atv === c && !_ui.value.pairingCode) _ui.update { it.copy(connection = s.toUi()) } }
+            }
+            sessionJobs += stateJob
+            try {
+                c.connect()
+                if (!tv.paired) saveCurrent(tv.copy(paired = true))
+                onAndroidTvConnected(c)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AndroidTvNotPairedException) {
+                stateJob.cancel()
+                if (tv.paired) saveCurrent(tv.copy(paired = false))
+                startPairing(tv.host, id)
+            } catch (e: Exception) {
+                // The state flow already shows the failure.
+            }
+        }
+    }
+
+    /** Asks the TV to show a pairing code; the user then types it in ([submitPairingCode]). */
+    private suspend fun startPairing(host: String, id: AndroidTvIdentity) {
+        val p = AndroidTvPairing(host, id, clientName = "Smart TV Remote on ${Build.MODEL ?: "phone"}")
+        atvPairing = p
+        _ui.update { it.copy(connection = WebOsClient.State.AwaitingPairing, pairingCode = true) }
+        try {
+            p.start()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            p.close()
+            if (atvPairing === p) atvPairing = null
+            _ui.update {
+                it.copy(pairingCode = false, connection = WebOsClient.State.Failed("Couldn't start pairing with the TV (${e.message})"))
+            }
+        }
+    }
+
+    fun submitPairingCode(code: String) {
+        val p = atvPairing ?: return
+        val tv = _ui.value.current ?: return
+        viewModelScope.launch {
+            try {
+                p.finish(code)
+                atvPairing = null
+                _ui.update { it.copy(pairingCode = false) }
+                saveCurrent(tv.copy(paired = true))
+                connect(_ui.value.current ?: return@launch)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AndroidTvWrongCodeException) {
+                showMessage("That code doesn't match the one on the TV. Check it and try again.")
+            } catch (e: Exception) {
+                // The TV ended the pairing (for example it rejected the code): ask for a fresh code.
+                showMessage("The TV didn't accept the code. A new code is on the TV.")
+                startPairing(tv.host, androidTvIdentity())
+            }
+        }
+    }
+
+    fun cancelPairing() {
+        atvPairing?.close()
+        atvPairing = null
+        _ui.update { it.copy(pairingCode = false, connection = WebOsClient.State.Disconnected) }
+    }
+
+    private fun onAndroidTvConnected(c: AndroidTvClient) {
+        sessionJobs += viewModelScope.launch {
+            c.volume.collect { v ->
+                if (v != null) _ui.update { it.copy(volume = VolumeStatus(v.level, v.muted)) }
+            }
+        }
+        sessionJobs += viewModelScope.launch {
+            c.keyboardShown.collect {
+                _ui.update { it.copy(keyboard = KeyboardState(focused = true), keyboardRequest = it.keyboardRequest + 1) }
+            }
+        }
+    }
+
+    private fun atvCommand(block: suspend (AndroidTvClient) -> Unit) {
+        val c = atv
+        if (c == null || !c.isConnected) {
+            showMessage("Not connected to the TV")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                block(c)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                showMessage(e.message ?: "Command failed")
+            }
+        }
+    }
+
+    private fun atvKey(code: Int) = atvCommand { it.key(code) }
+
+    /** Android TVs have no input list for remotes; this presses the remote's Input key instead. */
+    fun inputKey() = atvKey(AndroidKey.TV_INPUT)
+
+    private val isAndroidTv: Boolean get() = _ui.value.isAndroidTv
 
     private suspend fun ensurePointer(): PointerSocket? = pointerMutex.withLock {
         val c = client?.takeIf { it.isConnected } ?: return null
@@ -280,6 +496,10 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun button(name: String) {
+        if (isAndroidTv) {
+            AndroidKey.fromButton(name)?.let(::atvKey)
+            return
+        }
         viewModelScope.launch {
             val p = ensurePointer()
             if (p == null || !p.button(name)) {
@@ -291,33 +511,50 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun move(dx: Int, dy: Int) {
+        if (isAndroidTv) return
         viewModelScope.launch { ensurePointer()?.move(dx, dy) }
     }
 
     fun click() {
+        if (isAndroidTv) return
         viewModelScope.launch { ensurePointer()?.click() }
     }
 
     fun scroll(dy: Int) {
+        if (isAndroidTv) return
         viewModelScope.launch { ensurePointer()?.scroll(0, dy) }
     }
 
-    fun volumeUp() = command { it.volumeUp() }
-    fun volumeDown() = command { it.volumeDown() }
-    fun toggleMute() = command { it.setMute(!(_ui.value.volume?.muted ?: false)) }
-    fun channelUp() = command { it.channelUp() }
-    fun channelDown() = command { it.channelDown() }
-    fun play() = command { it.play() }
-    fun pause() = command { it.pause() }
-    fun stop() = command { it.stop() }
-    fun rewind() = command { it.rewind() }
-    fun fastForward() = command { it.fastForward() }
-    fun launchApp(app: AppInfo) = command { it.launchApp(app.id) }
+    fun volumeUp() = if (isAndroidTv) atvKey(AndroidKey.VOLUME_UP) else command { it.volumeUp() }
+    fun volumeDown() = if (isAndroidTv) atvKey(AndroidKey.VOLUME_DOWN) else command { it.volumeDown() }
+    fun toggleMute() =
+        if (isAndroidTv) atvKey(AndroidKey.VOLUME_MUTE) else command { it.setMute(!(_ui.value.volume?.muted ?: false)) }
+    fun channelUp() = if (isAndroidTv) atvKey(AndroidKey.CHANNEL_UP) else command { it.channelUp() }
+    fun channelDown() = if (isAndroidTv) atvKey(AndroidKey.CHANNEL_DOWN) else command { it.channelDown() }
+    fun play() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_PLAY) else command { it.play() }
+    fun pause() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_PAUSE) else command { it.pause() }
+    fun stop() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_STOP) else command { it.stop() }
+    fun rewind() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_REWIND) else command { it.rewind() }
+    fun fastForward() = if (isAndroidTv) atvKey(AndroidKey.MEDIA_FAST_FORWARD) else command { it.fastForward() }
+    fun launchApp(app: AppInfo) = if (isAndroidTv) atvCommand { it.launch(app.id) } else command { it.launchApp(app.id) }
     fun switchInput(input: InputInfo) = command { it.switchInput(input.id) }
     /** Mirrors an edit of the phone's text field onto the TV's focused text box. */
     fun typed(old: String, new: String) {
         val (delete, insert) = textEdit(old, new)
         if (delete == 0 && insert.isEmpty()) return
+        if (isAndroidTv) {
+            atvTyping.trySend { c ->
+                if (c.hasTextField) {
+                    // The TV told us about its text box: set its whole text in one go.
+                    c.setText(new)
+                } else {
+                    // Otherwise type with key presses, which covers letters, digits and a few symbols.
+                    repeat(delete) { c.key(AndroidKey.DEL) }
+                    insert.forEach { ch -> AndroidKey.forChar(ch)?.let { c.key(it) } }
+                }
+            }
+            return
+        }
         typing.trySend { c ->
             if (delete > 0) c.deleteCharacters(delete)
             if (insert.isNotEmpty()) c.insertText(insert)
@@ -325,18 +562,26 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun sendEnter() {
-        typing.trySend { it.sendEnter() }
+        if (isAndroidTv) atvTyping.trySend { it.key(AndroidKey.ENTER) } else typing.trySend { it.sendEnter() }
     }
 
     fun backspace() {
-        typing.trySend { it.deleteCharacters(1) }
+        if (isAndroidTv) atvTyping.trySend { it.key(AndroidKey.DEL) } else typing.trySend { it.deleteCharacters(1) }
     }
 
-    fun loadApps() = command { c -> _ui.update { it.copy(apps = c.listApps()) } }
+    fun loadApps() {
+        // Android TVs don't let remotes list installed apps, so offer a list of common ones.
+        if (isAndroidTv) _ui.update { it.copy(apps = AndroidTvApps.popular) }
+        else command { c -> _ui.update { it.copy(apps = c.listApps()) } }
+    }
     fun loadInputs() = command { c -> _ui.update { it.copy(inputs = c.listInputs()) } }
 
     /** Turns the TV off when connected, otherwise tries to wake it with Wake-on-LAN. */
     fun power() {
+        if (isAndroidTv) {
+            androidTvPower()
+            return
+        }
         val c = client
         if (c != null && c.isConnected) {
             viewModelScope.launch {
@@ -370,6 +615,39 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
                     if (client?.isConnected == true) return@launch
                 }
                 showMessage("The TV did not wake up. Check that \"Turn on via Wi-Fi\" is enabled on the TV.")
+            } finally {
+                _ui.update { it.copy(waking = false) }
+            }
+        }
+    }
+
+    /**
+     * Android TVs keep their remote service running in standby, so the Power key both turns
+     * them off and back on. If we're not connected yet, connect first and then press it.
+     */
+    private fun androidTvPower() {
+        val c = atv
+        if (c != null && c.isConnected) {
+            atvKey(AndroidKey.POWER)
+            return
+        }
+        val tv = _ui.value.current ?: return
+        if (_ui.value.pairingCode) return
+        viewModelScope.launch {
+            _ui.update { it.copy(waking = true) }
+            try {
+                connect(tv)
+                connectJob?.join()
+                val now = atv
+                if (now != null && now.isConnected) {
+                    if (now.isOn.value != true) now.key(AndroidKey.POWER)
+                } else if (!_ui.value.pairingCode) {
+                    showMessage("The TV didn't answer. Check that it's plugged in and on the same Wi-Fi.")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                showMessage(e.message ?: "Power failed")
             } finally {
                 _ui.update { it.copy(waking = false) }
             }
