@@ -1,3 +1,6 @@
+# v0.2.4
+- Remove the Bluetooth remote added in v0.2.3; it disconnected right after pairing. The app no longer asks for Bluetooth permissions
+
 # v0.2.3
 - LG webOS: search YouTube from the phone. YouTube on LG TVs ignores typed text, so when YouTube is on screen the keyboard becomes "Search YouTube" and opens YouTube's results for what you type
 - Bluetooth remote: the phone can act as a Bluetooth keyboard and media remote for when Wi-Fi isn't available (pair once from the TV's Bluetooth menu)
