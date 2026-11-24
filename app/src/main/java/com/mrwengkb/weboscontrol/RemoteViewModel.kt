@@ -33,6 +33,7 @@ import com.mrwengkb.weboscontrol.core.setMute
 import com.mrwengkb.weboscontrol.core.stop
 import com.mrwengkb.weboscontrol.core.switchInput
 import com.mrwengkb.weboscontrol.core.tvInfo
+import com.mrwengkb.weboscontrol.core.uninstallApp
 import com.mrwengkb.weboscontrol.core.volumeDown
 import com.mrwengkb.weboscontrol.core.volumeUp
 import com.mrwengkb.weboscontrol.core.volumeUpdates
@@ -330,6 +331,16 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     fun backspace() {
         typing.trySend { it.deleteCharacters(1) }
+    }
+
+    fun uninstallApp(app: AppInfo) = command { c ->
+        try {
+            c.uninstallApp(app.id)
+            showMessage("Uninstalled ${app.title}")
+        } catch (e: com.mrwengkb.weboscontrol.core.WebOsException) {
+            showMessage("The TV refused to uninstall ${app.title} (${e.message}). Use the TV remote instead: long-press the app and select X.")
+        }
+        _ui.update { it.copy(apps = runCatching { c.listApps() }.getOrNull() ?: it.apps) }
     }
 
     fun loadApps() = command { c -> _ui.update { it.copy(apps = c.listApps()) } }

@@ -30,9 +30,10 @@ class MiscTest {
     @Test
     fun parsesAppsAndInputs() {
         val apps = parseApps(Json.parseToJsonElement(
-            """{"launchPoints":[{"id":"netflix","title":"Netflix","icon":"http://x/n.png"},{"id":"youtube.leanback.v4","title":"YouTube"}]}"""
+            """{"launchPoints":[{"id":"netflix","title":"Netflix","icon":"http://x/n.png","removable":true},{"id":"youtube.leanback.v4","title":"YouTube"}]}"""
         ).jsonObject)
         assertEquals(listOf("Netflix", "YouTube"), apps.map { it.title })
+        assertEquals(listOf(true, false), apps.map { it.removable })
         val inputs = parseInputs(Json.parseToJsonElement(
             """{"devices":[{"id":"HDMI_1","label":"PlayStation","connected":true},{"id":"HDMI_2","label":"HDMI 2","connected":false}]}"""
         ).jsonObject)

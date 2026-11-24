@@ -1,6 +1,8 @@
 package com.mrwengkb.weboscontrol.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,11 +61,23 @@ import com.mrwengkb.weboscontrol.core.InputInfo
 import com.mrwengkb.weboscontrol.core.KeyboardState
 import com.mrwengkb.weboscontrol.core.TvButton
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun AppsSheet(apps: List<AppInfo>?, onPick: (AppInfo) -> Unit, onDismiss: () -> Unit) {
+fun AppsSheet(
+    apps: List<AppInfo>?,
+    onPick: (AppInfo) -> Unit,
+    onUninstall: (AppInfo) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var confirm by remember { mutableStateOf<AppInfo?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetTitle("Apps")
+        Text(
+            "Tap to open. Long-press an app to uninstall it.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
         if (apps == null) {
             Loading()
         } else {
@@ -74,7 +89,13 @@ fun AppsSheet(apps: List<AppInfo>?, onPick: (AppInfo) -> Unit, onDismiss: () -> 
                 modifier = Modifier.heightIn(max = 520.dp),
             ) {
                 items(apps, key = { it.id }) { app ->
-                    Card(Modifier.height(72.dp).clickable { onPick(app) }) {
+                    Card(
+                        Modifier.height(72.dp).combinedClickable(
+                            onClick = { onPick(app) },
+                            onLongClick = { confirm = app },
+                            onLongClickLabel = "Uninstall",
+                        ),
+                    ) {
                         Box(Modifier.padding(8.dp).fillMaxWidth().height(56.dp), contentAlignment = Alignment.Center) {
                             Text(
                                 app.title,
@@ -88,6 +109,22 @@ fun AppsSheet(apps: List<AppInfo>?, onPick: (AppInfo) -> Unit, onDismiss: () -> 
                 }
             }
         }
+    }
+    confirm?.let { app ->
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            title = { Text("Uninstall ${app.title}?") },
+            text = {
+                Text(
+                    if (app.removable) "This removes the app from the TV. You can reinstall it later from the LG Content Store."
+                    else "The TV marks this app as built-in, so it will probably refuse to remove it."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { onUninstall(app); confirm = null }) { Text("Uninstall") }
+            },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
+        )
     }
 }
 

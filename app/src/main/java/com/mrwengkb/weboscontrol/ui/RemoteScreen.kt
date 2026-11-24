@@ -216,7 +216,12 @@ fun RemoteScreen(state: UiState, vm: RemoteViewModel) {
     }
 
     when (sheet) {
-        Sheet.Apps -> AppsSheet(state.apps, onPick = { vm.launchApp(it); sheet = null }, onDismiss = { sheet = null })
+        Sheet.Apps -> AppsSheet(
+            state.apps,
+            onPick = { vm.launchApp(it); sheet = null },
+            onUninstall = vm::uninstallApp,
+            onDismiss = { sheet = null },
+        )
         Sheet.Inputs -> InputsSheet(state.inputs, onPick = { vm.switchInput(it); sheet = null }, onDismiss = { sheet = null })
         Sheet.Keyboard -> KeyboardSheet(vm, state.keyboard, onDismiss = { sheet = null })
         Sheet.Numbers -> NumberSheet(vm, onDismiss = { sheet = null })

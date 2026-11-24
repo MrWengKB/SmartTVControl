@@ -1,3 +1,6 @@
+# v0.1.4
+- Uninstall TV apps: long-press an app in the Apps list and confirm (experimental, some TVs may refuse)
+
 # v0.1.3
 - Check for updates: on launch the app looks for a newer release and asks whether to Update or Ignore
 - "Check for updates" button at the bottom of the TV list
