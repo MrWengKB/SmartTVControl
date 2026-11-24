@@ -8,6 +8,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrwengkb.smarttvcontrol.bluetooth.BluetoothRemote
 import com.mrwengkb.smarttvcontrol.bluetooth.BtState
+import com.mrwengkb.smarttvcontrol.core.foregroundAppUpdates
+import com.mrwengkb.smarttvcontrol.core.searchYouTube
 import com.mrwengkb.smarttvcontrol.core.Hid
 import com.mrwengkb.smarttvcontrol.core.HidAction
 import com.mrwengkb.smarttvcontrol.core.HidConsumer
@@ -99,6 +101,8 @@ data class UiState(
     val imeLog: List<String> = emptyList(),
     /** Android TV: type with key presses instead of the TV's text input. */
     val typeWithKeys: Boolean = false,
+    /** webOS: the app on the TV's screen, e.g. youtube.leanback.v4. */
+    val foregroundApp: String? = null,
     /** The Bluetooth remote (phone acting as a Bluetooth keyboard), for when Wi-Fi isn't available. */
     val bluetooth: BtState = BtState(),
     /** The Bluetooth remote sheet is open. */
@@ -380,7 +384,16 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
                 // Older TVs may not support the remote keyboard; typing then falls back to plain insertText.
             }
         }
+        sessionJobs += viewModelScope.launch {
+            runCatching { c.foregroundAppUpdates().collect { app -> _ui.update { it.copy(foregroundApp = app) } } }
+        }
         viewModelScope.launch { ensurePointer() }
+    }
+
+    /** webOS YouTube ignores typed text, so the keyboard sends it a search instead. */
+    fun searchYouTube(query: String) {
+        if (query.isBlank()) return
+        command { it.searchYouTube(query) }
     }
 
     private fun disconnect() {
@@ -397,7 +410,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         atvPairing?.close()
         atvPairing = null
         _ui.update {
-            it.copy(connection = WebOsClient.State.Disconnected, volume = null, keyboard = null, pairingCode = false)
+            it.copy(connection = WebOsClient.State.Disconnected, volume = null, keyboard = null, pairingCode = false, foregroundApp = null)
         }
     }
 
